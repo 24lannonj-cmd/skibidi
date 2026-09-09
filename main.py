@@ -1,0 +1,484 @@
+# Run Command:
+# uvicorn main:app --host 0.0.0.0 --port 8080
+
+import asyncio
+import json
+import math
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.responses import HTMLResponse
+
+app = FastAPI()
+
+# ==============================================================================
+# 1. FRONTEND HTML & CSS LAYOUT
+# ==============================================================================
+HTML_CLIENT = """
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Space Sandbox 3D</title>
+    <style>
+        body { 
+            margin: 0; 
+            background: #000; 
+            color: #fff; 
+            font-family: monospace; 
+            overflow: hidden; 
+        }
+        #ui { 
+            position: absolute; 
+            top: 15px; 
+            left: 15px; 
+            background: rgba(10,15,30,0.85); 
+            padding: 15px; 
+            border: 1px solid #00ffff44; 
+            border-radius: 8px; 
+            box-shadow: 0 0 15px rgba(0,255,255,0.15);
+            pointer-events: none;
+            z-index: 10;
+        }
+        .stat { color: #00ffff; }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <div id="ui">
+        <h3 style="margin-top: 0; color: #00ffff; text-shadow: 0 0 8px #00ffff;">3D Flight Deck</h3>
+        <p>Position: X <span id="pos-x" class="stat">0</span> | Z <span id="pos-z" class="stat">0</span> | Alt <span id="pos-y" class="stat">0</span></p>
+        <p>Speed: <span id="speed" class="stat">0</span> m/s</p>
+        <p>Pilots Online: <span id="player-count" class="stat">0</span></p>
+        <p>Controls: WASD (Forward/Turn), X/Z (Ascend/Descend)</p>
+    </div>
+
+    <script>
+        // ==============================================================================
+        // 2. THREE.JS SCENE SETUP & LIGHTING
+        // ==============================================================================
+        const scene = new THREE.Scene();
+        scene.fog = new THREE.FogExp2(0x020208, 0.0005);
+
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 15000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        document.body.appendChild(renderer.domElement);
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0x333355, 1.5);
+        scene.add(ambientLight);
+
+        const sunLight = new THREE.DirectionalLight(0xffffff, 2.0);
+        sunLight.position.set(500, 1000, 500);
+        scene.add(sunLight);
+
+        // Dense Background Starfield
+        const starGeo = new THREE.BufferGeometry();
+        const starCoords = [];
+        const starCount = 12000;
+
+        for (let i = 0; i < starCount; i++) {
+            starCoords.push(
+                (Math.random() - 0.5) * 15000,
+                (Math.random() - 0.5) * 15000,
+                (Math.random() - 0.5) * 15000
+            );
+        }
+
+        starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starCoords, 3));
+        const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 1.0 });
+        const starField = new THREE.Points(starGeo, starMat);
+        scene.add(starField);
+
+        // Planets (Instanced 3D Spheres with stored positions)
+        const planetRadius = 500;
+        const planetGeo = new THREE.SphereGeometry(planetRadius, 32, 32); 
+        const planetMat = new THREE.MeshStandardMaterial({ color: 0xde071c, roughness: 0.8 });
+        const planetCount = 10;
+        const planetData = [];
+
+        const planetMesh = new THREE.InstancedMesh(planetGeo, planetMat, planetCount);
+        const dummy = new THREE.Object3D();
+
+        for (let i = 0; i < planetCount; i++) {
+            const px = (Math.random() - 0.5) * 10000;
+            const py = (Math.random() - 0.5) * 10000;
+            const pz = (Math.random() - 0.5) * 10000;
+
+            dummy.position.set(px, py, pz);
+            dummy.updateMatrix();
+            planetMesh.setMatrixAt(i, dummy.matrix);
+
+            // Store planet center and radius for distance calculations
+            planetData.push({ x: px, y: py, z: pz, radius: planetRadius });
+        }
+
+        scene.add(planetMesh);
+
+        // Particle System for Orange Exhaust Trail
+        const trailParticles = [];
+        const particleGeo = new THREE.SphereGeometry(1.2, 6, 6);
+        const particleMat = new THREE.MeshBasicMaterial({ color: 0xff6600, transparent: true, opacity: 0.8 });
+
+        function spawnTrailParticle(x, y, z, angle) {
+            const particle = new THREE.Mesh(particleGeo, particleMat.clone());
+            particle.position.set(
+                x - Math.sin(angle) * 12 + (Math.random() - 0.5) * 2,
+                z + (Math.random() - 0.5) * 2,
+                y + Math.cos(angle) * 12 + (Math.random() - 0.5) * 2
+            );
+            scene.add(particle);
+            trailParticles.push({
+                mesh: particle,
+                life: 1.0
+            });
+        }
+
+        function updateParticles() {
+            for (let i = trailParticles.length - 1; i >= 0; i--) {
+                const p = trailParticles[i];
+                p.life -= 0.04;
+                p.mesh.scale.multiplyScalar(0.96);
+                p.mesh.material.opacity = p.life;
+
+                if (p.life <= 0) {
+                    scene.remove(p.mesh);
+                    p.mesh.geometry.dispose();
+                    p.mesh.material.dispose();
+                    trailParticles.splice(i, 1);
+                }
+            }
+        }
+
+        // ==============================================================================
+        // 3. 3D MODEL FACTORIES
+        // ==============================================================================
+        function createShipMesh(isLocal) {
+            const group = new THREE.Group();
+
+            // Ship Nose / Hull
+            const hullGeo = new THREE.ConeGeometry(8, 24, 4);
+            hullGeo.rotateX(-Math.PI / 2);
+            const hullMat = new THREE.MeshStandardMaterial({ 
+                color: isLocal ? 0x00ff88 : 0xff3344, 
+                roughness: 0.3, 
+                metalness: 0.8 
+            });
+            const hull = new THREE.Mesh(hullGeo, hullMat);
+            group.add(hull);
+
+            // Orange Thruster Plume Mesh
+            const engineGeo = new THREE.CylinderGeometry(2.5, 0, 14, 8);
+            engineGeo.rotateX(-Math.PI / 2);
+            const engineMat = new THREE.MeshStandardMaterial({ 
+                color: 0xff5500,
+                emissive: 0xff4400,
+                emissiveIntensity: 3.0
+            });
+            const engine = new THREE.Mesh(engineGeo, engineMat);
+            engine.position.z = 12;
+            group.add(engine);
+
+            // Outer Translucent Fire Halo
+            const glowGeo = new THREE.CylinderGeometry(5, 0, 18, 8);
+            glowGeo.rotateX(-Math.PI / 2);
+            const glowMat = new THREE.MeshBasicMaterial({
+                color: 0xff2200,
+                transparent: true,
+                opacity: 0.45
+            });
+            const glowMesh = new THREE.Mesh(glowGeo, glowMat);
+            glowMesh.position.z = 13;
+            group.add(glowMesh);
+
+            // Orange PointLight for Dynamic Lighting
+            const engineLight = new THREE.PointLight(0xff6600, 4, 60);
+            engineLight.position.z = 10;
+            group.add(engineLight);
+
+            return group;
+        }
+
+        function createStationMesh() {
+            const group = new THREE.Group();
+            
+            // Outer Ring
+            const ringGeo = new THREE.TorusGeometry(80, 6, 16, 64);
+            const ringMat = new THREE.MeshStandardMaterial({ color: 0x00ffff, metalness: 0.9, roughness: 0.2 });
+            const ring = new THREE.Mesh(ringGeo, ringMat);
+            ring.rotation.x = Math.PI / 2;
+            group.add(ring);
+
+            // Central Core
+            const coreGeo = new THREE.SphereGeometry(25, 32, 32);
+            const coreMat = new THREE.MeshStandardMaterial({ color: 0x2244aa, metalness: 0.5 });
+            const core = new THREE.Mesh(coreGeo, coreMat);
+            group.add(core);
+
+            return group;
+        }
+
+        const stationMesh = createStationMesh();
+        scene.add(stationMesh);
+
+        // ==============================================================================
+        // 4. CLIENT STATE & WEBSOCKET HANDLING
+        // ==============================================================================
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${wsProtocol}//${window.location.host}/ws`;
+        const ws = new WebSocket(wsUrl);
+
+        let localPlayerId = null;
+        let gameState = { players: {} };
+        const shipMeshes = {};
+        const keys = {};
+
+        window.addEventListener('keydown', e => { keys[e.key] = true; });
+        window.addEventListener('keyup', e => { keys[e.key] = false; });
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        ws.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            if (data.type === 'init') {
+                localPlayerId = data.id;
+                if (!gameState.players[localPlayerId]) {
+                    gameState.players[localPlayerId] = { x: 200, y: 0, z: 0, angle: 0, vx: 0, vy: 0 };
+                }
+                return;
+            }
+            if (data.type === 'state') {
+                for (let id in data.gameState.players) {
+                    if (id !== localPlayerId) {
+                        gameState.players[id] = data.gameState.players[id];
+                    } else if (!gameState.players[localPlayerId]) {
+                        gameState.players[localPlayerId] = data.gameState.players[id];
+                    }
+                }
+                for (let id in gameState.players) {
+                    if (!data.gameState.players[id] && id !== localPlayerId) {
+                        delete gameState.players[id];
+                        if (shipMeshes[id]) {
+                            scene.remove(shipMeshes[id]);
+                            delete shipMeshes[id];
+                        }
+                    }
+                }
+                document.getElementById('player-count').innerText = Object.keys(data.gameState.players).length;
+            }
+        };
+
+        // ==============================================================================
+        // 5. MOVEMENT & SHIP PHYSICS
+        // ==============================================================================
+        function updateLocalPhysics() {
+            if (localPlayerId && gameState.players[localPlayerId]) {
+                const me = gameState.players[localPlayerId];
+
+                // Ensure numeric default for z
+                if (me.z === undefined || isNaN(me.z)) me.z = 0;
+
+                // Turn Left / Right
+                if (keys['ArrowLeft'] || keys['a'] || keys['A']) me.angle -= 0.03;
+                if (keys['ArrowRight'] || keys['d'] || keys['D']) me.angle += 0.03;
+                
+                // Thrust Forward
+                if (keys['ArrowUp'] || keys['w'] || keys['W']) {
+                    me.vx += Math.sin(me.angle) * 0.3;
+                    me.vy -= Math.cos(me.angle) * 0.3;
+                    
+                    spawnTrailParticle(me.x, me.y, me.z, me.angle);
+                }
+                
+                // Brake / Reverse
+                if (keys['ArrowDown'] || keys['s'] || keys['S']) {
+                    me.vx *= 0.90;
+                    me.vy *= 0.90;
+                }
+
+                // Up and down
+                if (keys['x'] || keys['X']) me.z += 0.5; // Ascend
+                if (keys['z'] || keys['Z']) me.z -= 0.5; // Descend
+
+                // Continuous trail particle for idle movement
+                spawnTrailParticle(me.x, me.y, me.z, me.angle);
+
+                // Apply velocity and drag friction
+                me.x += me.vx + 0.07;
+                me.y += me.vy + 0.03;
+                me.vx *= 0.985;
+                me.vy *= 0.985;
+
+                // Planet Distance Checks
+                const shipRadius = 12; // Approx collision bounding sphere radius
+                const shipPos = new THREE.Vector3(me.x, me.z, me.y);
+
+                for (let i = 0; i < planetData.length; i++) {
+                    const planet = planetData[i];
+                    const planetPos = new THREE.Vector3(planet.x, planet.y, planet.z);
+                    const distance = shipPos.distanceTo(planetPos);
+
+                    // Collision check
+                    if (distance < planet.radius + shipRadius) {
+                        // Ship intersects planet surface
+                        me.vx = me.vx * -0.5; // Bounce back with reduced speed
+                        me.vy = me.vy * -0.5;
+                        angle = angle * -1; // Reverse direction
+                        
+                    }
+                }
+
+                // Sync current state to server
+                if (ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ 
+                        type: 'sync', x: me.x, y: me.y, z: me.z, angle: me.angle, vx: me.vx, vy: me.vy 
+                    }));
+                }
+            }
+        }
+
+        // ==============================================================================
+        // 6. CHASE CAMERA CONTROLS
+        // ==============================================================================
+        function updateCameraPosition(me) {
+            const cameraDistance = 140; 
+            const cameraHeight = 50;    
+
+            // Offset camera behind ship trajectory
+            const targetCamX = me.x - Math.sin(me.angle) * cameraDistance;
+            const targetCamZ = me.y + Math.cos(me.angle) * cameraDistance;
+            const targetCamY = me.z + cameraHeight;
+
+            // Smooth interpolation
+            camera.position.x += (targetCamX - camera.position.x) * 0.1;
+            camera.position.z += (targetCamZ - camera.position.z) * 0.1;
+            camera.position.y += (targetCamY - camera.position.y) * 0.1;
+
+            // Target focal point slightly ahead of the ship nose
+            const lookTarget = new THREE.Vector3(
+                me.x + Math.sin(me.angle) * 40,
+                me.z,
+                me.y - Math.cos(me.angle) * 40
+            );
+            camera.lookAt(lookTarget);
+        }
+
+        // ==============================================================================
+        // 7. MAIN GAME & RENDER LOOP
+        // ==============================================================================
+        function animate() {
+            requestAnimationFrame(animate);
+            updateLocalPhysics();
+            updateParticles();
+
+            // World Animations
+            stationMesh.rotation.y += 0.005;
+
+            // Render Player Meshes
+            for (let id in gameState.players) {
+                const p = gameState.players[id];
+                if (!p) continue;
+
+                if (!shipMeshes[id]) {
+                    shipMeshes[id] = createShipMesh(id === localPlayerId);
+                    scene.add(shipMeshes[id]);
+                }
+
+                shipMeshes[id].position.x = p.x;
+                shipMeshes[id].position.y = p.z || 0;
+                shipMeshes[id].position.z = p.y;
+                shipMeshes[id].rotation.y = -p.angle;
+            }
+
+            // Update Chase Camera & HUD Stats
+            const me = gameState.players[localPlayerId];
+            if (me && shipMeshes[localPlayerId]) {
+                updateCameraPosition(me);
+
+                const spd = Math.sqrt(me.vx * me.vx + me.vy * me.vy).toFixed(1);
+                document.getElementById('pos-x').innerText = Math.round(me.x);
+                document.getElementById('pos-z').innerText = Math.round(me.y);
+                document.getElementById('pos-y').innerText = Math.round(me.z || 0);
+                document.getElementById('speed').innerText = spd;
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        animate();
+    </script>
+</body>
+</html>
+"""
+
+# ==============================================================================
+# 8. BACKEND GAME STATE & FASTAPI SERVER
+# ==============================================================================
+game_state = {
+    "station": {"x": 0, "y": 0, "radius": 80},
+    "players": {}
+}
+
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: dict[str, WebSocket] = {}
+
+    async def connect(self, websocket: WebSocket, player_id: str):
+        await websocket.accept()
+        self.active_connections[player_id] = websocket
+        game_state["players"][player_id] = {
+            "x": 200, "y": 0, "z": 0, "angle": 0, "vx": 0, "vy": 0
+        }
+        await websocket.send_text(json.dumps({"type": "init", "id": player_id}))
+
+    def disconnect(self, player_id: str):
+        if player_id in self.active_connections:
+            del self.active_connections[player_id]
+        if player_id in game_state["players"]:
+            del game_state["players"][player_id]
+
+    async def broadcast_state(self):
+        payload = json.dumps({"type": "state", "gameState": game_state})
+        for connection in list(self.active_connections.values()):
+            try:
+                await connection.send_text(payload)
+            except Exception:
+                pass
+
+manager = ConnectionManager()
+
+@app.get("/")
+async def get():
+    return HTMLResponse(HTML_CLIENT)
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    player_id = str(id(websocket))
+    await manager.connect(websocket, player_id)
+    try:
+        while True:
+            data = await websocket.receive_text()
+            payload = json.loads(data)
+            
+            if payload.get("type") == "sync":
+                player = game_state["players"].get(player_id)
+                if player:
+                    player["x"] = payload.get("x", player["x"])
+                    player["y"] = payload.get("y", player["y"])
+                    player["z"] = payload.get("z", player["z"])
+                    player["angle"] = payload.get("angle", player["angle"])
+                    player["vx"] = payload.get("vx", player["vx"])
+                    player["vy"] = payload.get("vy", player["vy"])
+    except WebSocketDisconnect:
+        manager.disconnect(player_id)
+
+async def game_loop():
+    while True:
+        await manager.broadcast_state()
+        await asyncio.sleep(1 / 15)
+
+@app.on_event("startup")
+async def startup_event():
+    asyncio.create_task(game_loop())
