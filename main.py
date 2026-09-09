@@ -1,5 +1,5 @@
 # Run Command:
-# uvicorn main:app --host 0.0.0.0 --port 8080
+# uvicorn main:app --host 0.0.0.0 --port $PORT
 
 import asyncio
 import json
@@ -108,7 +108,7 @@ HTML_CLIENT = """
             dummy.updateMatrix();
             planetMesh.setMatrixAt(i, dummy.matrix);
 
-            // Store planet center and radius for distance calculations
+            // Store planet center coordinates and radius for collisions
             planetData.push({ x: px, y: py, z: pz, radius: planetRadius });
         }
 
@@ -311,8 +311,8 @@ HTML_CLIENT = """
                 me.vx *= 0.985;
                 me.vy *= 0.985;
 
-                // Planet Distance Checks
-                const shipRadius = 12; // Approx collision bounding sphere radius
+                // Planet Collision Detection & Bounce Response
+                const shipRadius = 12;
                 const shipPos = new THREE.Vector3(me.x, me.z, me.y);
 
                 for (let i = 0; i < planetData.length; i++) {
@@ -320,13 +320,22 @@ HTML_CLIENT = """
                     const planetPos = new THREE.Vector3(planet.x, planet.y, planet.z);
                     const distance = shipPos.distanceTo(planetPos);
 
-                    // Collision check
                     if (distance < planet.radius + shipRadius) {
-                        // Ship intersects planet surface
-                        me.vx = me.vx * -0.5; // Bounce back with reduced speed
-                        me.vy = me.vy * -0.5;
-                        angle = angle + 180; // Reverse direction
-                        
+                        // 1. Calculate direction vector from planet center to ship
+                        const nx = me.x - planet.x;
+                        const ny = me.y - planet.y;
+
+                        // 2. Determine target bounce angle facing outward
+                        const targetAngle = Math.atan2(nx, -ny);
+
+                        // 3. Smoothly turn angle toward target outbound vector
+                        let angleDiff = targetAngle - me.angle;
+                        angleDiff = Math.atan2(Math.sin(angleDiff), Math.cos(angleDiff));
+                        me.angle += angleDiff * 0.15;
+
+                        // 4. Dampen and invert velocity for a springy rebound
+                        me.vx = -me.vx * 0.5;
+                        me.vy = -me.vy * 0.5;
                     }
                 }
 
