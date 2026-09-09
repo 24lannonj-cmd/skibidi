@@ -3,7 +3,6 @@
 
 import asyncio
 import json
-import math
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 
@@ -166,7 +165,7 @@ HTML_CLIENT = """
             const hull = new THREE.Mesh(hullGeo, hullMat);
             group.add(hull);
 
-            // Orange Thruster Plume Mesh
+            // Thruster Plume
             const engineGeo = new THREE.CylinderGeometry(2.5, 0, 14, 8);
             engineGeo.rotateX(-Math.PI / 2);
             const engineMat = new THREE.MeshStandardMaterial({ 
@@ -178,37 +177,17 @@ HTML_CLIENT = """
             engine.position.z = 12;
             group.add(engine);
 
-            // Outer Translucent Fire Halo
-            const glowGeo = new THREE.CylinderGeometry(5, 0, 18, 8);
-            glowGeo.rotateX(-Math.PI / 2);
-            const glowMat = new THREE.MeshBasicMaterial({
-                color: 0xff2200,
-                transparent: true,
-                opacity: 0.45
-            });
-            const glowMesh = new THREE.Mesh(glowGeo, glowMat);
-            glowMesh.position.z = 13;
-            group.add(glowMesh);
-
-            // Orange PointLight for Dynamic Lighting
-            const engineLight = new THREE.PointLight(0xff6600, 4, 60);
-            engineLight.position.z = 10;
-            group.add(engineLight);
-
             return group;
         }
 
         function createStationMesh() {
             const group = new THREE.Group();
-            
-            // Outer Ring
             const ringGeo = new THREE.TorusGeometry(80, 6, 16, 64);
             const ringMat = new THREE.MeshStandardMaterial({ color: 0x00ffff, metalness: 0.9, roughness: 0.2 });
             const ring = new THREE.Mesh(ringGeo, ringMat);
             ring.rotation.x = Math.PI / 2;
             group.add(ring);
 
-            // Central Core
             const coreGeo = new THREE.SphereGeometry(25, 32, 32);
             const coreMat = new THREE.MeshStandardMaterial({ color: 0x2244aa, metalness: 0.5 });
             const core = new THREE.Mesh(coreGeo, coreMat);
@@ -277,77 +256,73 @@ HTML_CLIENT = """
             if (localPlayerId && gameState.players[localPlayerId]) {
                 const me = gameState.players[localPlayerId];
 
-                // Ensure numeric default for z
                 if (me.z === undefined || isNaN(me.z)) me.z = 0;
 
-                // Turn Left / Right
+                // Controls
                 if (keys['ArrowLeft'] || keys['a'] || keys['A']) me.angle -= 0.03;
                 if (keys['ArrowRight'] || keys['d'] || keys['D']) me.angle += 0.03;
                 
-                // Thrust Forward
                 if (keys['ArrowUp'] || keys['w'] || keys['W']) {
                     me.vx += Math.sin(me.angle) * 0.3;
                     me.vy -= Math.cos(me.angle) * 0.3;
-                    
                     spawnTrailParticle(me.x, me.y, me.z, me.angle);
                 }
                 
-                // Brake / Reverse
                 if (keys['ArrowDown'] || keys['s'] || keys['S']) {
                     me.vx *= 0.90;
                     me.vy *= 0.90;
                 }
 
-                // Up and down
-                if (keys['x'] || keys['X']) me.z += 0.5; // Ascend
-                if (keys['z'] || keys['Z']) me.z -= 0.5; // Descend
+                if (keys['x'] || keys['X']) me.z += 0.5;
+                if (keys['z'] || keys['Z']) me.z -= 0.5;
 
-                // Continuous trail particle for idle movement
-                spawnTrailParticle(me.x, me.y, me.z, me.angle);
-
-                // Apply velocity and drag friction
-                me.x += me.vx + 0.07;
-                me.y += me.vy + 0.03;
+                // Velocity & friction
+                me.x += me.vx;
+                me.y += me.vy;
                 me.vx *= 0.985;
                 me.vy *= 0.985;
 
-            // Planet Collision Detection & Smooth Reflection
-            const shipRadius = 12;
-            
-            for (let i = 0; i < planetData.length; i++) {
-                const planet = planetData[i];
-                
-                // 1. Calculate distance vector from planet center to ship position
-                const dx = me.x - planet.x;
-                const dy = me.z - planet.y; // 3D altitude maps to planet Y
-                const dz = me.y - planet.z;
-                const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-                const minDist = planet.radius + shipRadius;
-            
-                if (dist < minDist) {
-                    // 2. Calculate surface normal (pointing straight out from planet)
-                    const nx = dx / dist;
-                    const nz = dz / dist;
-            
-                    // 3. HARD SEPARATION: Instantly push ship outside planet surface to prevent sticking
-                    const overlap = minDist - dist;
-                    me.x += nx * overlap;
-                    me.y += nz * overlap;
-            
-                    // 4. Calculate specular reflection vector for smooth angle change
-                    // Vector reflection formula: R = V - 2*(V · N)*N
-                    const dotProduct = me.vx * nx + me.vy * nz;
+                // Planet Collision & Vector Bounce Physics
+                const shipRadius = 12;
+                for (let i = 0; i < planetData.length; i++) {
+                    const planet = planetData[i];
                     
-                    // Only bounce if moving toward the planet surface
-                    if (dotProduct < 0) {
-                        me.vx = (me.vx - 2 * dotProduct * nx) * 0.6; // 0.6 adds surface friction/dampening
-                        me.vy = (me.vy - 2 * dotProduct * nz) * 0.6;
-            
-                        // 5. Instantly align ship nose toward the new rebound velocity trajectory
-                        me.angle = Math.atan2(me.vx, -me.vy);
+                    const dx = me.x - planet.x;
+                    const dy = me.z - planet.y; 
+                    const dz = me.y - planet.z;
+                    const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+                    const minDist = planet.radius + shipRadius;
+
+                    if (dist < minDist && dist > 0) {
+                        // 1. Surface normal vector
+                        const nx = dx / dist;
+                        const nz = dz / dist;
+
+                        // 2. Prevent sticking by pushing ship out of the surface
+                        const overlap = minDist - dist;
+                        me.x += nx * overlap;
+                        me.y += nz * overlap;
+
+                        // 3. Vector reflection
+                        const dotProduct = me.vx * nx + me.vy * nz;
+                        if (dotProduct < 0) {
+                            me.vx = (me.vx - 2 * dotProduct * nx) * 0.6;
+                            me.vy = (me.vy - 2 * dotProduct * nz) * 0.6;
+
+                            // Smoothly point ship toward outbound bounce direction
+                            me.angle = Math.atan2(me.vx, -me.vy);
+                        }
                     }
                 }
+
+                // Sync to server
+                if (ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ 
+                        type: 'sync', x: me.x, y: me.y, z: me.z, angle: me.angle, vx: me.vx, vy: me.vy 
+                    }));
+                }
             }
+        }
 
         // ==============================================================================
         // 6. CHASE CAMERA CONTROLS
@@ -356,17 +331,14 @@ HTML_CLIENT = """
             const cameraDistance = 140; 
             const cameraHeight = 50;    
 
-            // Offset camera behind ship trajectory
             const targetCamX = me.x - Math.sin(me.angle) * cameraDistance;
             const targetCamZ = me.y + Math.cos(me.angle) * cameraDistance;
             const targetCamY = me.z + cameraHeight;
 
-            // Smooth interpolation
             camera.position.x += (targetCamX - camera.position.x) * 0.1;
             camera.position.z += (targetCamZ - camera.position.z) * 0.1;
             camera.position.y += (targetCamY - camera.position.y) * 0.1;
 
-            // Target focal point slightly ahead of the ship nose
             const lookTarget = new THREE.Vector3(
                 me.x + Math.sin(me.angle) * 40,
                 me.z,
@@ -376,17 +348,15 @@ HTML_CLIENT = """
         }
 
         // ==============================================================================
-        // 7. MAIN GAME & RENDER LOOP
+        // 7. MAIN GAME LOOP
         // ==============================================================================
         function animate() {
             requestAnimationFrame(animate);
             updateLocalPhysics();
             updateParticles();
 
-            // World Animations
             stationMesh.rotation.y += 0.005;
 
-            // Render Player Meshes
             for (let id in gameState.players) {
                 const p = gameState.players[id];
                 if (!p) continue;
@@ -402,7 +372,6 @@ HTML_CLIENT = """
                 shipMeshes[id].rotation.y = -p.angle;
             }
 
-            // Update Chase Camera & HUD Stats
             const me = gameState.players[localPlayerId];
             if (me && shipMeshes[localPlayerId]) {
                 updateCameraPosition(me);
