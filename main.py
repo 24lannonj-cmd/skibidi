@@ -311,42 +311,43 @@ HTML_CLIENT = """
                 me.vx *= 0.985;
                 me.vy *= 0.985;
 
-                // Planet Collision Detection & Bounce Response
-                const shipRadius = 12;
-                const shipPos = new THREE.Vector3(me.x, me.z, me.y);
-
-                for (let i = 0; i < planetData.length; i++) {
-                    const planet = planetData[i];
-                    const planetPos = new THREE.Vector3(planet.x, planet.y, planet.z);
-                    const distance = shipPos.distanceTo(planetPos);
-
-                    if (distance < planet.radius + shipRadius) {
-                        // 1. Calculate direction vector from planet center to ship
-                        const nx = me.x - planet.x;
-                        const ny = me.y - planet.y;
-
-                        // 2. Determine target bounce angle facing outward
-                        const targetAngle = Math.atan2(nx, -ny);
-
-                        // 3. Smoothly turn angle toward target outbound vector
-                        let angleDiff = targetAngle - me.angle;
-                        angleDiff = Math.atan2(Math.sin(angleDiff), Math.cos(angleDiff));
-                        me.angle += angleDiff * 0.15;
-
-                        // 4. Dampen and invert velocity for a springy rebound
-                        me.vx = -me.vx * 0.5;
-                        me.vy = -me.vy * 0.5;
+            // Planet Collision Detection & Smooth Reflection
+            const shipRadius = 12;
+            
+            for (let i = 0; i < planetData.length; i++) {
+                const planet = planetData[i];
+                
+                // 1. Calculate distance vector from planet center to ship position
+                const dx = me.x - planet.x;
+                const dy = me.z - planet.y; // 3D altitude maps to planet Y
+                const dz = me.y - planet.z;
+                const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+                const minDist = planet.radius + shipRadius;
+            
+                if (dist < minDist) {
+                    // 2. Calculate surface normal (pointing straight out from planet)
+                    const nx = dx / dist;
+                    const nz = dz / dist;
+            
+                    // 3. HARD SEPARATION: Instantly push ship outside planet surface to prevent sticking
+                    const overlap = minDist - dist;
+                    me.x += nx * overlap;
+                    me.y += nz * overlap;
+            
+                    // 4. Calculate specular reflection vector for smooth angle change
+                    // Vector reflection formula: R = V - 2*(V · N)*N
+                    const dotProduct = me.vx * nx + me.vy * nz;
+                    
+                    // Only bounce if moving toward the planet surface
+                    if (dotProduct < 0) {
+                        me.vx = (me.vx - 2 * dotProduct * nx) * 0.6; // 0.6 adds surface friction/dampening
+                        me.vy = (me.vy - 2 * dotProduct * nz) * 0.6;
+            
+                        // 5. Instantly align ship nose toward the new rebound velocity trajectory
+                        me.angle = Math.atan2(me.vx, -me.vy);
                     }
                 }
-
-                // Sync current state to server
-                if (ws.readyState === WebSocket.OPEN) {
-                    ws.send(JSON.stringify({ 
-                        type: 'sync', x: me.x, y: me.y, z: me.z, angle: me.angle, vx: me.vx, vy: me.vy 
-                    }));
-                }
             }
-        }
 
         // ==============================================================================
         // 6. CHASE CAMERA CONTROLS
