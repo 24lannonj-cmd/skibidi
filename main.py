@@ -325,7 +325,7 @@ HTML_CLIENT = """
                         // Ship intersects planet surface
                         me.vx = me.vx * -0.5; // Bounce back with reduced speed
                         me.vy = me.vy * -0.5;
-                        angle = angle * -1; // Reverse direction
+                        angle = angle + 180; // Reverse direction
                         
                     }
                 }
