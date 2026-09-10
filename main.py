@@ -265,22 +265,31 @@ HTML_CLIENT = """
                 if (keys['ArrowRight'] || keys['d'] || keys['D']) me.angle += 0.03;
                 
                 // Thrust Forward
-                if (keys['ArrowUp'] || keys['w'] || keys['W']) {
-                    me.vx += Math.sin(me.angle) * 0.4;
-                    me.vy -= Math.cos(me.angle) * 0.4;
+                if me.vy > 30= or me.vx >= 30 {
+                    if 
+                    if (keys['ArrowUp'] || keys['w'] || keys['W']) {
+                    me.vx += 0;
+                    me.vy -= 0;
                     spawnTrailParticle(me.x, me.y, me.z, me.angle);
                 }
-                
+                else {
+                    if (keys['ArrowUp'] || keys['w'] || keys['W']) {
+                    me.vx += Math.sin(me.angle) * 0.3;
+                    me.vy -= Math.cos(me.angle) * 0.3;
+                    spawnTrailParticle(me.x, me.y, me.z, me.angle);
+                }
+                }
+                }
                 // Brake / Reverse
                 if (keys['ArrowDown'] || keys['s'] || keys['S']) {
                     me.vx *= 0.90;
                     me.vy *= 0.90;
                     me.vz *= 0.90;
                 }
-        
+
                 // Ascend / Descend via velocity rather than teleportation
-                if (keys['x'] || keys['X']) me.vz += 0.4;
-                if (keys['z'] || keys['Z']) me.vz -= 0.4;
+                if (keys['x'] || keys['X']) me.vz += 0.3;
+                if (keys['z'] || keys['Z']) me.vz -= 0.3;
         
                 // Apply velocity to positions
                 me.x += me.vx;
@@ -290,7 +299,7 @@ HTML_CLIENT = """
                 // Apply friction across all 3 axes
                 me.vx *= 0.987;
                 me.vy *= 0.987;
-                me.vz *= 0.980;
+                me.vz *= 0.950;
         
                 // Full 3D Planet Collision & Vector Bounce Physics
                 const shipRadius = 12;
