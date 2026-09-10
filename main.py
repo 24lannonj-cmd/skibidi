@@ -255,75 +255,90 @@ HTML_CLIENT = """
         function updateLocalPhysics() {
             if (localPlayerId && gameState.players[localPlayerId]) {
                 const me = gameState.players[localPlayerId];
-
+        
+                // Ensure numeric defaults for 3D state
                 if (me.z === undefined || isNaN(me.z)) me.z = 0;
-
-                // Controls
+                if (me.vz === undefined || isNaN(me.vz)) me.vz = 0;
+        
+                // Turn Left / Right
                 if (keys['ArrowLeft'] || keys['a'] || keys['A']) me.angle -= 0.03;
                 if (keys['ArrowRight'] || keys['d'] || keys['D']) me.angle += 0.03;
                 
+                // Thrust Forward
                 if (keys['ArrowUp'] || keys['w'] || keys['W']) {
                     me.vx += Math.sin(me.angle) * 0.3;
                     me.vy -= Math.cos(me.angle) * 0.3;
                     spawnTrailParticle(me.x, me.y, me.z, me.angle);
                 }
                 
+                // Brake / Reverse
                 if (keys['ArrowDown'] || keys['s'] || keys['S']) {
                     me.vx *= 0.90;
                     me.vy *= 0.90;
+                    me.vz *= 0.90;
                 }
-                // Altitude
-                if (keys['x'] || keys['X']) me.z += 0.75;
-                if (keys['z'] || keys['Z']) me.z -= 0.75;
-
-                // Velocity & friction
+        
+                // Ascend / Descend via velocity rather than teleportation
+                if (keys['x'] || keys['X']) me.vz += 0.7;
+                if (keys['z'] || keys['Z']) me.vz -= 0.7;
+        
+                // Apply velocity to positions
                 me.x += me.vx;
                 me.y += me.vy;
-                me.vx *= 0.985;
-                me.vy *= 0.985;
-
-                // Planet Collision & Vector Bounce Physics
+                me.z += me.vz;
+        
+                // Apply friction across all 3 axes
+                me.vx *= 0.9;
+                me.vy *= 0.9;
+                me.vz *= 0.9;
+        
+                // Full 3D Planet Collision & Vector Bounce Physics
                 const shipRadius = 12;
                 for (let i = 0; i < planetData.length; i++) {
                     const planet = planetData[i];
                     
+                    // Note: Canvas Y maps to planet Z, and Canvas Z maps to planet Y altitude
                     const dx = me.x - planet.x;
                     const dy = me.z - planet.y; 
                     const dz = me.y - planet.z;
                     const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
                     const minDist = planet.radius + shipRadius;
-
+        
                     if (dist < minDist && dist > 0) {
-                        // 1. Surface normal vector
+                        // 1. Calculate full 3D surface normal vector
                         const nx = dx / dist;
+                        const ny = dy / dist;
                         const nz = dz / dist;
-                        
-                        // 2. Prevent sticking by pushing ship out of the surface
+        
+                        // 2. HARD SEPARATION: Push ship out along all 3 axes to end sticking completely
                         const overlap = minDist - dist;
                         me.x += nx * overlap;
+                        me.z += ny * overlap;
                         me.y += nz * overlap;
-
-                        // 3. Vector reflection
-                        const dotProduct = me.vx * nx + me.vy * nz;
+        
+                        // 3. Full 3D Vector Reflection: Dot Product = V · N
+                        const dotProduct = me.vx * nx + me.vz * ny + me.vy * nz;
+        
+                        // Reflect only if ship is moving inward toward the core
                         if (dotProduct < 0) {
-                            me.vx = (me.vx - 2 * dotProduct * nx) * 1.5;
-                            me.vy = (me.vy - 2 * dotProduct * nz) * 1.5;
-
-                            // Smoothly point ship toward outbound bounce direction
+                            me.vx = (me.vx - 2 * dotProduct * nx) * 0.6;
+                            me.vz = (me.vz - 2 * dotProduct * ny) * 0.6;
+                            me.vy = (me.vy - 2 * dotProduct * nz) * 0.6;
+        
+                            // Realign horizontal angle toward outward trajectory
                             me.angle = Math.atan2(me.vx, -me.vy);
                         }
                     }
                 }
-
-                // Sync to server
+        
+                // Sync state to server
                 if (ws.readyState === WebSocket.OPEN) {
                     ws.send(JSON.stringify({ 
-                        type: 'sync', x: me.x, y: me.y, z: me.z, angle: me.angle, vx: me.vx, vy: me.vy 
+                        type: 'sync', x: me.x, y: me.y, z: me.z, angle: me.angle, vx: me.vx, vy: me.vy, vz: me.vz 
                     }));
                 }
             }
         }
-
         // ==============================================================================
         // 6. CHASE CAMERA CONTROLS
         // ==============================================================================
