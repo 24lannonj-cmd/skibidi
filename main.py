@@ -272,9 +272,9 @@ HTML_CLIENT = """
                     me.vx *= 0.90;
                     me.vy *= 0.90;
                 }
-
-                if (keys['x'] || keys['X']) me.z += 0.5;
-                if (keys['z'] || keys['Z']) me.z -= 0.5;
+                // Altitude
+                if (keys['x'] || keys['X']) me.z += 0.75;
+                if (keys['z'] || keys['Z']) me.z -= 0.75;
 
                 // Velocity & friction
                 me.x += me.vx;
