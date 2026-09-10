@@ -266,8 +266,8 @@ HTML_CLIENT = """
                 
                 // Thrust Forward
                 if (keys['ArrowUp'] || keys['w'] || keys['W']) {
-                    me.vx += Math.sin(me.angle) * 0.5;
-                    me.vy -= Math.cos(me.angle) * 0.5;
+                    me.vx += Math.sin(me.angle) * 0.4;
+                    me.vy -= Math.cos(me.angle) * 0.4;
                     spawnTrailParticle(me.x, me.y, me.z, me.angle);
                 }
                 
@@ -288,9 +288,9 @@ HTML_CLIENT = """
                 me.z += me.vz;
         
                 // Apply friction across all 3 axes
-                me.vx *= 0.990;
-                me.vy *= 0.990;
-                me.vz *= 0.990;
+                me.vx *= 0.987;
+                me.vy *= 0.987;
+                me.vz *= 0.980;
         
                 // Full 3D Planet Collision & Vector Bounce Physics
                 const shipRadius = 12;
