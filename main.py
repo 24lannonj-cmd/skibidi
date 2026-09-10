@@ -73,7 +73,7 @@ HTML_CLIENT = """
         // Dense Background Starfield
         const starGeo = new THREE.BufferGeometry();
         const starCoords = [];
-        const starCount = 12000;
+        const starCount = 1200000;
 
         for (let i = 0; i < starCount; i++) {
             starCoords.push(
@@ -297,7 +297,7 @@ HTML_CLIENT = """
                         // 1. Surface normal vector
                         const nx = dx / dist;
                         const nz = dz / dist;
-
+                        
                         // 2. Prevent sticking by pushing ship out of the surface
                         const overlap = minDist - dist;
                         me.x += nx * overlap;
@@ -306,8 +306,8 @@ HTML_CLIENT = """
                         // 3. Vector reflection
                         const dotProduct = me.vx * nx + me.vy * nz;
                         if (dotProduct < 0) {
-                            me.vx = (me.vx - 2 * dotProduct * nx) * 0.6;
-                            me.vy = (me.vy - 2 * dotProduct * nz) * 0.6;
+                            me.vx = (me.vx - 2 * dotProduct * nx) * 1;
+                            me.vy = (me.vy - 2 * dotProduct * nz) * 1;
 
                             // Smoothly point ship toward outbound bounce direction
                             me.angle = Math.atan2(me.vx, -me.vy);
