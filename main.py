@@ -265,20 +265,18 @@ HTML_CLIENT = """
                 if (keys['ArrowRight'] || keys['d'] || keys['D']) me.angle += 0.03;
                 
                 // Thrust Forward
-                if me.vy > 30= or me.vx >= 30 {
-                    if 
-                    if (keys['ArrowUp'] || keys['w'] || keys['W']) {
-                    me.vx += 0;
-                    me.vy -= 0;
+
+                const currentSpeed = Math.sqrt(me.vx * me.vx + me.vy * me.vy + me.vz * me.vz);
+                const maxSpeed = 30;
+                
+                // Apply forward thrust only if key is pressed
+                if (keys['ArrowUp'] || keys['w'] || keys['W']) {
+                    if (currentSpeed < maxSpeed) {
+                        me.vx += Math.sin(me.angle) * 0.3;
+                        me.vy -= Math.cos(me.angle) * 0.3;
+                    }
+                    // Always spawn particles when thrusting, even at max speed
                     spawnTrailParticle(me.x, me.y, me.z, me.angle);
-                }
-                else {
-                    if (keys['ArrowUp'] || keys['w'] || keys['W']) {
-                    me.vx += Math.sin(me.angle) * 0.3;
-                    me.vy -= Math.cos(me.angle) * 0.3;
-                    spawnTrailParticle(me.x, me.y, me.z, me.angle);
-                }
-                }
                 }
                 // Brake / Reverse
                 if (keys['ArrowDown'] || keys['s'] || keys['S']) {
