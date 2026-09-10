@@ -267,7 +267,7 @@ HTML_CLIENT = """
                 // Thrust Forward
 
                 const currentSpeed = Math.sqrt(me.vx * me.vx + me.vy * me.vy + me.vz * me.vz);
-                const maxSpeed = 30;
+                const maxSpeed = 20;
                 
                 // Apply forward thrust only if key is pressed
                 if (keys['ArrowUp'] || keys['w'] || keys['W']) {
