@@ -306,8 +306,8 @@ HTML_CLIENT = """
                         // 3. Vector reflection
                         const dotProduct = me.vx * nx + me.vy * nz;
                         if (dotProduct < 0) {
-                            me.vx = (me.vx - 2 * dotProduct * nx) * 1;
-                            me.vy = (me.vy - 2 * dotProduct * nz) * 1;
+                            me.vx = (me.vx - 2 * dotProduct * nx) * 1.5;
+                            me.vy = (me.vy - 2 * dotProduct * nz) * 1.5;
 
                             // Smoothly point ship toward outbound bounce direction
                             me.angle = Math.atan2(me.vx, -me.vy);
