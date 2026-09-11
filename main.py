@@ -70,21 +70,20 @@ HTML_CLIENT = """
         sunLight.position.set(500, 1000, 500);
         scene.add(sunLight);
 
-        // Dense Background Starfield
+        // Localized Starfield (fewer stars, better performance)
+        const starCount = 3000; // Reduced from 12,000 for maximum FPS
         const starGeo = new THREE.BufferGeometry();
-        const starCoords = [];
-        const starCount = 12000000;
-
-        for (let i = 0; i < starCount; i++) {
-            starCoords.push(
-                (Math.random() - 0.5) * 10000,
-                (Math.random() - 0.5) * 10000,
-                (Math.random() - 0.5) * 10000
-            );
+        const starCoords = new Float32Array(starCount * 3);
+        const starRadius = 2000; // Localized boundary size
+        
+        for (let i = 0; i < starCount * 3; i += 3) {
+            starCoords[i] = (Math.random() - 0.5) * starRadius;
+            starCoords[i + 1] = (Math.random() - 0.5) * starRadius;
+            starCoords[i + 2] = (Math.random() - 0.5) * starRadius;
         }
-
-        starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starCoords, 3));
-        const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 1.0 });
+        
+        starGeo.setAttribute('position', new THREE.BufferAttribute(starCoords, 3));
+        const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 1.2 });
         const starField = new THREE.Points(starGeo, starMat);
         scene.add(starField);
 
@@ -382,7 +381,12 @@ HTML_CLIENT = """
             requestAnimationFrame(animate);
             updateLocalPhysics();
             updateParticles();
-
+            
+            const me = gameState.players[localPlayerId];
+            if (me) {
+                // Snap starfield center to player coordinates
+                starField.position.set(me.x, me.z || 0, me.y);
+            }
             stationMesh.rotation.y += 0.005;
 
             for (let id in gameState.players) {
