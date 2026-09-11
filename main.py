@@ -320,13 +320,13 @@ HTML_CLIENT = """
         
                 if (me.z === undefined || isNaN(me.z)) me.z = 0;
                 if (me.vz === undefined || isNaN(me.vz)) me.vz = 0;
-        
+                // TURNING
                 if (keys['ArrowLeft'] || keys['a'] || keys['A']) me.angle -= 0.03;
                 if (keys['ArrowRight'] || keys['d'] || keys['D']) me.angle += 0.03;
                 
                 const currentSpeed = Math.sqrt(me.vx * me.vx + me.vy * me.vy + me.vz * me.vz);
                 const maxSpeed = 20;
-                
+                // THRUST
                 if (keys['ArrowUp'] || keys['w'] || keys['W']) {
                     if (currentSpeed < maxSpeed) {
                         me.vx += Math.sin(me.angle) * 0.3;
@@ -334,13 +334,13 @@ HTML_CLIENT = """
                     }
                     spawnTrailParticle(me.x, me.y, me.z, me.angle);
                 }
-
+                // BRAKING
                 if (keys['ArrowDown'] || keys['s'] || keys['S']) {
-                    me.vx *= 0.90;
-                    me.vy *= 0.90;
-                    me.vz *= 0.90;
+                    me.vx *= 0.95;
+                    me.vy *= 0.95;
+                    me.vz *= 0.95;
                 }
-
+                // ALTITUDE
                 if (keys['x'] || keys['X']) me.vz += 0.3;
                 if (keys['z'] || keys['Z']) me.vz -= 0.3;
         
