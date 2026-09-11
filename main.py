@@ -70,20 +70,22 @@ HTML_CLIENT = """
         sunLight.position.set(500, 1000, 500);
         scene.add(sunLight);
 
-        // Localized Starfield (fewer stars, better performance)
-        const starCount = 3000; // Reduced from 12,000 for maximum FPS
+        // High-Performance Localized Starfield
+        const starCount = 3000;
         const starGeo = new THREE.BufferGeometry();
-        const starCoords = new Float32Array(starCount * 3);
-        const starRadius = 2000; // Localized boundary size
-        
-        for (let i = 0; i < starCount * 3; i += 3) {
-            starCoords[i] = (Math.random() - 0.5) * starRadius;
-            starCoords[i + 1] = (Math.random() - 0.5) * starRadius;
-            starCoords[i + 2] = (Math.random() - 0.5) * starRadius;
+        const starCoords = [];
+        const starRadius = 2500;
+
+        for (let i = 0; i < starCount; i++) {
+            starCoords.push(
+                (Math.random() - 0.5) * starRadius,
+                (Math.random() - 0.5) * starRadius,
+                (Math.random() - 0.5) * starRadius
+            );
         }
-        
-        starGeo.setAttribute('position', new THREE.BufferAttribute(starCoords, 3));
-        const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 1.2 });
+
+        starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starCoords, 3));
+        const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 1.5 });
         const starField = new THREE.Points(starGeo, starMat);
         scene.add(starField);
 
@@ -117,7 +119,7 @@ HTML_CLIENT = """
         lineGeo.setAttribute('position', new THREE.BufferAttribute(linePositions, 3));
         const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff, opacity: 0.8, transparent: true });
         const originLine = new THREE.Line(lineGeo, lineMat);
-        originLine.frustumCulled = false;
+        originLine.frustumCulled = false; // Always render line regardless of camera angle
         scene.add(originLine);
 
         // Particle System for Exhaust Trail
@@ -301,7 +303,7 @@ HTML_CLIENT = """
                 // Apply friction across all 3 axes
                 me.vx *= 0.987;
                 me.vy *= 0.987;
-                me.vz *= 0.5;
+                me.vz *= 0.950;
         
                 // Full 3D Planet Collision & Vector Bounce Physics
                 const shipRadius = 12;
@@ -381,12 +383,7 @@ HTML_CLIENT = """
             requestAnimationFrame(animate);
             updateLocalPhysics();
             updateParticles();
-            
-            const me = gameState.players[localPlayerId];
-            if (me) {
-                // Snap starfield center to player coordinates
-                starField.position.set(me.x, me.z || 0, me.y);
-            }
+
             stationMesh.rotation.y += 0.005;
 
             for (let id in gameState.players) {
@@ -408,13 +405,16 @@ HTML_CLIENT = """
             if (me && shipMeshes[localPlayerId]) {
                 updateCameraPosition(me);
 
+                // Snap starfield center to player location for infinite stars
+                starField.position.set(me.x, me.z || 0, me.y);
+
                 // Update line pointing to origin
                 const posArr = originLine.geometry.attributes.position.array;
                 posArr[0] = 0;     // Origin X
                 posArr[1] = 0;     // Origin Y
                 posArr[2] = 0;     // Origin Z
                 posArr[3] = me.x;  // Ship X
-                posArr[4] = me.z;  // Ship Y (Altitude)
+                posArr[4] = me.z || 0;  // Ship Y (Altitude)
                 posArr[5] = me.y;  // Ship Z
                 originLine.geometry.attributes.position.needsUpdate = true;
 
