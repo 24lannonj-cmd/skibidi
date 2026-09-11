@@ -118,6 +118,7 @@ HTML_CLIENT = """
         lineGeo.setAttribute('position', new THREE.BufferAttribute(linePositions, 3));
         const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff, opacity: 0.8, transparent: true });
         const originLine = new THREE.Line(lineGeo, lineMat);
+        originLine.frustumCulled = false;
         scene.add(originLine);
 
         // Particle System for Exhaust Trail
