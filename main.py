@@ -376,35 +376,45 @@ HTML_CLIENT = """
             requestAnimationFrame(animate);
             updateLocalPhysics();
             updateParticles();
-
+        
             stationMesh.rotation.y += 0.005;
-
+        
             for (let id in gameState.players) {
                 const p = gameState.players[id];
                 if (!p) continue;
-
+        
                 if (!shipMeshes[id]) {
                     shipMeshes[id] = createShipMesh(id === localPlayerId);
                     scene.add(shipMeshes[id]);
                 }
-
+        
                 shipMeshes[id].position.x = p.x;
                 shipMeshes[id].position.y = p.z || 0;
                 shipMeshes[id].position.z = p.y;
                 shipMeshes[id].rotation.y = -p.angle;
             }
-
+        
             const me = gameState.players[localPlayerId];
             if (me && shipMeshes[localPlayerId]) {
                 updateCameraPosition(me);
-
-                const spd = Math.sqrt(me.vx * me.vx + me.vy * me.vy).toFixed(1);
+        
+                // Update Origin Line Endpoints (From 0,0,0 to Player Position)
+                const posArr = originLine.geometry.attributes.position.array;
+                posArr[0] = 0;     // Origin X
+                posArr[1] = 0;     // Origin Y
+                posArr[2] = 0;     // Origin Z
+                posArr[3] = me.x;  // Ship X
+                posArr[4] = me.z;  // Ship Y (Altitude)
+                posArr[5] = me.y;  // Ship Z
+                originLine.geometry.attributes.position.needsUpdate = true;
+        
+                const spd = Math.sqrt(me.vx * me.vx + me.vy * me.vy + (me.vz || 0) * (me.vz || 0)).toFixed(1);
                 document.getElementById('pos-x').innerText = Math.round(me.x);
                 document.getElementById('pos-z').innerText = Math.round(me.y);
                 document.getElementById('pos-y').innerText = Math.round(me.z || 0);
                 document.getElementById('speed').innerText = spd;
             }
-
+        
             renderer.render(scene, camera);
         }
 
