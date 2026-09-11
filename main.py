@@ -73,7 +73,7 @@ HTML_CLIENT = """
         // Dense Background Starfield
         const starGeo = new THREE.BufferGeometry();
         const starCoords = [];
-        const starCount = 1200000;
+        const starCount = 12000000;
 
         for (let i = 0; i < starCount; i++) {
             starCoords.push(
@@ -92,7 +92,7 @@ HTML_CLIENT = """
         const planetRadius = 500;
         const planetGeo = new THREE.SphereGeometry(planetRadius, 32, 32); 
         const planetMat = new THREE.MeshStandardMaterial({ color: 0xde071c, roughness: 0.8 });
-        const planetCount = 100;
+        const planetCount = 10;
         const planetData = [];
 
         const planetMesh = new THREE.InstancedMesh(planetGeo, planetMat, planetCount);
