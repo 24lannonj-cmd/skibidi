@@ -70,24 +70,72 @@ HTML_CLIENT = """
         sunLight.position.set(500, 1000, 500);
         scene.add(sunLight);
 
-        // High-Performance Localized Starfield
-        const starCount = 3000;
-        const starGeo = new THREE.BufferGeometry();
-        const starCoords = [];
-        const starRadius = 2500;
+        // ==============================================================================
+        // GRID-BASED STAR CHUNK MANAGER
+        // ==============================================================================
+        const CHUNK_SIZE = 1500;
+        const DRAW_RADIUS = 2; // Renders grid around player
+        const STARS_PER_CHUNK = 250;
+        const starChunks = {};
 
-        for (let i = 0; i < starCount; i++) {
-            starCoords.push(
-                (Math.random() - 0.5) * starRadius,
-                (Math.random() - 0.5) * starRadius,
-                (Math.random() - 0.5) * starRadius
-            );
+        function seededRandom(seed) {
+            const x = Math.sin(seed++) * 10000;
+            return x - Math.floor(x);
         }
 
-        starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starCoords, 3));
-        const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 1.5 });
-        const starField = new THREE.Points(starGeo, starMat);
-        scene.add(starField);
+        function createStarChunk(cx, cy, cz) {
+            const key = `${cx},${cy},${cz}`;
+            if (starChunks[key]) return;
+
+            const starGeo = new THREE.BufferGeometry();
+            const starCoords = [];
+            let seed = cx * 73856093 ^ cy * 19349663 ^ cz * 83492791;
+
+            for (let i = 0; i < STARS_PER_CHUNK; i++) {
+                const rx = seededRandom(seed++) * CHUNK_SIZE + cx * CHUNK_SIZE;
+                const ry = seededRandom(seed++) * CHUNK_SIZE + cy * CHUNK_SIZE;
+                const rz = seededRandom(seed++) * CHUNK_SIZE + cz * CHUNK_SIZE;
+                starCoords.push(rx, ry, rz);
+            }
+
+            starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starCoords, 3));
+            const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 1.2 });
+            const chunkMesh = new THREE.Points(starGeo, starMat);
+            
+            scene.add(chunkMesh);
+            starChunks[key] = chunkMesh;
+        }
+
+        function updateStarChunks(playerX, playerY, playerZ) {
+            const currentChunkX = Math.floor(playerX / CHUNK_SIZE);
+            const currentChunkY = Math.floor(playerY / CHUNK_SIZE);
+            const currentChunkZ = Math.floor(playerZ / CHUNK_SIZE);
+
+            const activeKeys = new Set();
+
+            for (let x = -DRAW_RADIUS; x <= DRAW_RADIUS; x++) {
+                for (let y = -DRAW_RADIUS; y <= DRAW_RADIUS; y++) {
+                    for (let z = -DRAW_RADIUS; z <= DRAW_RADIUS; z++) {
+                        const cx = currentChunkX + x;
+                        const cy = currentChunkY + y;
+                        const cz = currentChunkZ + z;
+                        const key = `${cx},${cy},${cz}`;
+                        
+                        activeKeys.add(key);
+                        createStarChunk(cx, cy, cz);
+                    }
+                }
+            }
+
+            for (let key in starChunks) {
+                if (!activeKeys.has(key)) {
+                    scene.remove(starChunks[key]);
+                    starChunks[key].geometry.dispose();
+                    starChunks[key].material.dispose();
+                    delete starChunks[key];
+                }
+            }
+        }
 
         // Planets (Instanced 3D Spheres with stored positions)
         const planetRadius = 500;
@@ -119,7 +167,7 @@ HTML_CLIENT = """
         lineGeo.setAttribute('position', new THREE.BufferAttribute(linePositions, 3));
         const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff, opacity: 0.8, transparent: true });
         const originLine = new THREE.Line(lineGeo, lineMat);
-        originLine.frustumCulled = false; // Always render line regardless of camera angle
+        originLine.frustumCulled = false;
         scene.add(originLine);
 
         // Particle System for Exhaust Trail
@@ -310,7 +358,6 @@ HTML_CLIENT = """
                 for (let i = 0; i < planetData.length; i++) {
                     const planet = planetData[i];
                     
-                    // Note: Canvas Y maps to planet Z, and Canvas Z maps to planet Y altitude
                     const dx = me.x - planet.x;
                     const dy = me.z - planet.y; 
                     const dz = me.y - planet.z;
@@ -318,27 +365,22 @@ HTML_CLIENT = """
                     const minDist = planet.radius + shipRadius;
         
                     if (dist < minDist && dist > 0) {
-                        // 1. Calculate full 3D surface normal vector
                         const nx = dx / dist;
                         const ny = dy / dist;
                         const nz = dz / dist;
         
-                        // 2. HARD SEPARATION: Push ship out along all 3 axes to end sticking completely
                         const overlap = minDist - dist;
                         me.x += nx * overlap;
                         me.z += ny * overlap;
                         me.y += nz * overlap;
         
-                        // 3. Full 3D Vector Reflection: Dot Product = V · N
                         const dotProduct = me.vx * nx + me.vz * ny + me.vy * nz;
         
-                        // Reflect only if ship is moving inward toward the core
                         if (dotProduct < 0) {
                             me.vx = (me.vx - 2 * dotProduct * nx) * 0.6;
                             me.vz = (me.vz - 2 * dotProduct * ny) * 0.6;
                             me.vy = (me.vy - 2 * dotProduct * nz) * 0.6;
         
-                            // Realign horizontal angle toward outward trajectory
                             me.angle = Math.atan2(me.vx, -me.vy);
                         }
                     }
@@ -405,17 +447,17 @@ HTML_CLIENT = """
             if (me && shipMeshes[localPlayerId]) {
                 updateCameraPosition(me);
 
-                // Snap starfield center to player location for infinite stars
-                starField.position.set(me.x, me.z || 0, me.y);
+                // Update dynamic star chunks around ship position
+                updateStarChunks(me.x, me.z || 0, me.y);
 
                 // Update line pointing to origin
                 const posArr = originLine.geometry.attributes.position.array;
-                posArr[0] = 0;     // Origin X
-                posArr[1] = 0;     // Origin Y
-                posArr[2] = 0;     // Origin Z
-                posArr[3] = me.x;  // Ship X
-                posArr[4] = me.z || 0;  // Ship Y (Altitude)
-                posArr[5] = me.y;  // Ship Z
+                posArr[0] = 0;     
+                posArr[1] = 0;     
+                posArr[2] = 0;     
+                posArr[3] = me.x;  
+                posArr[4] = me.z || 0; 
+                posArr[5] = me.y;  
                 originLine.geometry.attributes.position.needsUpdate = true;
 
                 const spd = Math.sqrt(me.vx * me.vx + me.vy * me.vy + (me.vz || 0) * (me.vz || 0)).toFixed(1);
