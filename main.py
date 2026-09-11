@@ -75,7 +75,7 @@ HTML_CLIENT = """
         // ==============================================================================
         const CHUNK_SIZE = 1500;
         const DRAW_RADIUS = 2; // Renders grid around player
-        const STARS_PER_CHUNK = 250;
+        const STARS_PER_CHUNK = 1000;
         const starChunks = {};
 
         function seededRandom(seed) {
