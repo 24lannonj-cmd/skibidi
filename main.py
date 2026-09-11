@@ -70,18 +70,19 @@ HTML_CLIENT = """
         sunLight.position.set(500, 1000, 500);
         scene.add(sunLight);
 
-        // ==============================================================================
-        // GRID-BASED STAR CHUNK MANAGER
-        // ==============================================================================
-        const CHUNK_SIZE = 1500;
-        const DRAW_RADIUS = 2; // Renders grid around player
-        const STARS_PER_CHUNK = 1000;
-        const starChunks = {};
-
+        // Deterministic Pseudo-Random Generator (Ensures identical universe across all clients)
         function seededRandom(seed) {
-            const x = Math.sin(seed++) * 10000;
+            const x = Math.sin(seed) * 10000;
             return x - Math.floor(x);
         }
+
+        // ==============================================================================
+        // GRID-BASED STAR CHUNK MANAGER (SYNCED VIA SEED)
+        // ==============================================================================
+        const CHUNK_SIZE = 1500;
+        const DRAW_RADIUS = 2;
+        const STARS_PER_CHUNK = 250;
+        const starChunks = {};
 
         function createStarChunk(cx, cy, cz) {
             const key = `${cx},${cy},${cz}`;
@@ -89,12 +90,15 @@ HTML_CLIENT = """
 
             const starGeo = new THREE.BufferGeometry();
             const starCoords = [];
-            let seed = cx * 73856093 ^ cy * 19349663 ^ cz * 83492791;
+            let seed = (cx * 73856093) ^ (cy * 19349663) ^ (cz * 83492791);
 
             for (let i = 0; i < STARS_PER_CHUNK; i++) {
-                const rx = seededRandom(seed++) * CHUNK_SIZE + cx * CHUNK_SIZE;
-                const ry = seededRandom(seed++) * CHUNK_SIZE + cy * CHUNK_SIZE;
-                const rz = seededRandom(seed++) * CHUNK_SIZE + cz * CHUNK_SIZE;
+                seed++;
+                const rx = seededRandom(seed) * CHUNK_SIZE + cx * CHUNK_SIZE;
+                seed++;
+                const ry = seededRandom(seed) * CHUNK_SIZE + cy * CHUNK_SIZE;
+                seed++;
+                const rz = seededRandom(seed) * CHUNK_SIZE + cz * CHUNK_SIZE;
                 starCoords.push(rx, ry, rz);
             }
 
@@ -137,7 +141,9 @@ HTML_CLIENT = """
             }
         }
 
-        // Planets (Instanced 3D Spheres with stored positions)
+        // ==============================================================================
+        // PLANETS (DETERMINISTICALLY SYNCED ACROSS MULTIPLAYER)
+        // ==============================================================================
         const planetRadius = 500;
         const planetGeo = new THREE.SphereGeometry(planetRadius, 32, 32); 
         const planetMat = new THREE.MeshStandardMaterial({ color: 0xde071c, roughness: 0.8 });
@@ -147,10 +153,14 @@ HTML_CLIENT = """
         const planetMesh = new THREE.InstancedMesh(planetGeo, planetMat, planetCount);
         const dummy = new THREE.Object3D();
 
+        let planetSeed = 12345; // Constant seed for global sync
         for (let i = 0; i < planetCount; i++) {
-            const px = (Math.random() - 0.5) * 10000;
-            const py = (Math.random() - 0.5) * 10000;
-            const pz = (Math.random() - 0.5) * 10000;
+            planetSeed++;
+            const px = (seededRandom(planetSeed) - 0.5) * 10000;
+            planetSeed++;
+            const py = (seededRandom(planetSeed) - 0.5) * 10000;
+            planetSeed++;
+            const pz = (seededRandom(planetSeed) - 0.5) * 10000;
 
             dummy.position.set(px, py, pz);
             dummy.updateMatrix();
@@ -183,10 +193,7 @@ HTML_CLIENT = """
                 y + Math.cos(angle) * 12 + (Math.random() - 0.5) * 2
             );
             scene.add(particle);
-            trailParticles.push({
-                mesh: particle,
-                life: 1.0
-            });
+            trailParticles.push({ mesh: particle, life: 1.0 });
         }
 
         function updateParticles() {
@@ -311,49 +318,40 @@ HTML_CLIENT = """
             if (localPlayerId && gameState.players[localPlayerId]) {
                 const me = gameState.players[localPlayerId];
         
-                // Ensure numeric defaults for 3D state
                 if (me.z === undefined || isNaN(me.z)) me.z = 0;
                 if (me.vz === undefined || isNaN(me.vz)) me.vz = 0;
         
-                // Turn Left / Right
                 if (keys['ArrowLeft'] || keys['a'] || keys['A']) me.angle -= 0.03;
                 if (keys['ArrowRight'] || keys['d'] || keys['D']) me.angle += 0.03;
                 
-                // Thrust Forward
                 const currentSpeed = Math.sqrt(me.vx * me.vx + me.vy * me.vy + me.vz * me.vz);
                 const maxSpeed = 20;
                 
-                // Apply forward thrust only if key is pressed
                 if (keys['ArrowUp'] || keys['w'] || keys['W']) {
                     if (currentSpeed < maxSpeed) {
                         me.vx += Math.sin(me.angle) * 0.3;
                         me.vy -= Math.cos(me.angle) * 0.3;
                     }
-                    // Always spawn particles when thrusting, even at max speed
                     spawnTrailParticle(me.x, me.y, me.z, me.angle);
                 }
-                // Brake / Reverse
+
                 if (keys['ArrowDown'] || keys['s'] || keys['S']) {
                     me.vx *= 0.90;
                     me.vy *= 0.90;
                     me.vz *= 0.90;
                 }
 
-                // Ascend / Descend via velocity rather than teleportation
                 if (keys['x'] || keys['X']) me.vz += 0.3;
                 if (keys['z'] || keys['Z']) me.vz -= 0.3;
         
-                // Apply velocity to positions
                 me.x += me.vx;
                 me.y += me.vy;
                 me.z += me.vz;
         
-                // Apply friction across all 3 axes
                 me.vx *= 0.987;
                 me.vy *= 0.987;
                 me.vz *= 0.950;
         
-                // Full 3D Planet Collision & Vector Bounce Physics
                 const shipRadius = 12;
                 for (let i = 0; i < planetData.length; i++) {
                     const planet = planetData[i];
@@ -380,13 +378,11 @@ HTML_CLIENT = """
                             me.vx = (me.vx - 2 * dotProduct * nx) * 0.6;
                             me.vz = (me.vz - 2 * dotProduct * ny) * 0.6;
                             me.vy = (me.vy - 2 * dotProduct * nz) * 0.6;
-        
                             me.angle = Math.atan2(me.vx, -me.vy);
                         }
                     }
                 }
         
-                // Sync state to server
                 if (ws.readyState === WebSocket.OPEN) {
                     ws.send(JSON.stringify({ 
                         type: 'sync', x: me.x, y: me.y, z: me.z, angle: me.angle, vx: me.vx, vy: me.vy, vz: me.vz 
@@ -419,7 +415,7 @@ HTML_CLIENT = """
         }
 
         // ==============================================================================
-        // 7. MAIN GAME LOOP
+        // 7. MAIN GAME LOOP WITH INTERPOLATED MULTIPLAYER MOVEMENT
         // ==============================================================================
         function animate() {
             requestAnimationFrame(animate);
@@ -428,6 +424,7 @@ HTML_CLIENT = """
 
             stationMesh.rotation.y += 0.005;
 
+            // Render and smooth out remote ships via linear interpolation
             for (let id in gameState.players) {
                 const p = gameState.players[id];
                 if (!p) continue;
@@ -437,20 +434,31 @@ HTML_CLIENT = """
                     scene.add(shipMeshes[id]);
                 }
 
-                shipMeshes[id].position.x = p.x;
-                shipMeshes[id].position.y = p.z || 0;
-                shipMeshes[id].position.z = p.y;
-                shipMeshes[id].rotation.y = -p.angle;
+                if (id === localPlayerId) {
+                    // Instant update for local player
+                    shipMeshes[id].position.x = p.x;
+                    shipMeshes[id].position.y = p.z || 0;
+                    shipMeshes[id].position.z = p.y;
+                    shipMeshes[id].rotation.y = -p.angle;
+                } else {
+                    // Smooth lerp interpolation for remote players (eliminates network lag jitter)
+                    const targetX = p.x;
+                    const targetY = p.z || 0;
+                    const targetZ = p.y;
+
+                    shipMeshes[id].position.x += (targetX - shipMeshes[id].position.x) * 0.25;
+                    shipMeshes[id].position.y += (targetY - shipMeshes[id].position.y) * 0.25;
+                    shipMeshes[id].position.z += (targetZ - shipMeshes[id].position.z) * 0.25;
+                    shipMeshes[id].rotation.y += (-p.angle - shipMeshes[id].rotation.y) * 0.25;
+                }
             }
 
             const me = gameState.players[localPlayerId];
             if (me && shipMeshes[localPlayerId]) {
                 updateCameraPosition(me);
 
-                // Update dynamic star chunks around ship position
                 updateStarChunks(me.x, me.z || 0, me.y);
 
-                // Update line pointing to origin
                 const posArr = originLine.geometry.attributes.position.array;
                 posArr[0] = 0;     
                 posArr[1] = 0;     
@@ -541,7 +549,7 @@ async def websocket_endpoint(websocket: WebSocket):
 async def game_loop():
     while True:
         await manager.broadcast_state()
-        await asyncio.sleep(1 / 15)
+        await asyncio.sleep(1 / 30) # Increased broadcast rate to 30 FPS for lower latency
 
 @app.on_event("startup")
 async def startup_event():
