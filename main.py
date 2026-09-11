@@ -77,9 +77,9 @@ HTML_CLIENT = """
 
         for (let i = 0; i < starCount; i++) {
             starCoords.push(
-                (Math.random() - 0.5) * 15000,
-                (Math.random() - 0.5) * 15000,
-                (Math.random() - 0.5) * 15000
+                (Math.random() - 0.5) * 10000,
+                (Math.random() - 0.5) * 10000,
+                (Math.random() - 0.5) * 10000
             );
         }
 
@@ -92,7 +92,7 @@ HTML_CLIENT = """
         const planetRadius = 500;
         const planetGeo = new THREE.SphereGeometry(planetRadius, 32, 32); 
         const planetMat = new THREE.MeshStandardMaterial({ color: 0xde071c, roughness: 0.8 });
-        const planetCount = 10;
+        const planetCount = 100;
         const planetData = [];
 
         const planetMesh = new THREE.InstancedMesh(planetGeo, planetMat, planetCount);
@@ -302,7 +302,7 @@ HTML_CLIENT = """
                 // Apply friction across all 3 axes
                 me.vx *= 0.987;
                 me.vy *= 0.987;
-                me.vz *= 0.950;
+                me.vz *= 0.5;
         
                 // Full 3D Planet Collision & Vector Bounce Physics
                 const shipRadius = 12;
