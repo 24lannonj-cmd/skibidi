@@ -1,6 +1,6 @@
 # Run Command:
 # uvicorn main:app --host 0.0.0.0 --port $PORT
-# https://space-game-405o.onrender.com 
+
 import asyncio
 import json
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -107,13 +107,20 @@ HTML_CLIENT = """
             dummy.updateMatrix();
             planetMesh.setMatrixAt(i, dummy.matrix);
 
-            // Store planet center coordinates and radius for collisions
             planetData.push({ x: px, y: py, z: pz, radius: planetRadius });
         }
 
         scene.add(planetMesh);
 
-        // Particle System for Orange Exhaust Trail
+        // Dynamic Line Pointing to Origin (0,0,0)
+        const lineGeo = new THREE.BufferGeometry();
+        const linePositions = new Float32Array(6); 
+        lineGeo.setAttribute('position', new THREE.BufferAttribute(linePositions, 3));
+        const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff, opacity: 0.8, transparent: true });
+        const originLine = new THREE.Line(lineGeo, lineMat);
+        scene.add(originLine);
+
+        // Particle System for Exhaust Trail
         const trailParticles = [];
         const particleGeo = new THREE.SphereGeometry(1.2, 6, 6);
         const particleMat = new THREE.MeshBasicMaterial({ color: 0xff6600, transparent: true, opacity: 0.8 });
@@ -154,7 +161,6 @@ HTML_CLIENT = """
         function createShipMesh(isLocal) {
             const group = new THREE.Group();
 
-            // Ship Nose / Hull
             const hullGeo = new THREE.ConeGeometry(8, 24, 4);
             hullGeo.rotateX(-Math.PI / 2);
             const hullMat = new THREE.MeshStandardMaterial({ 
@@ -165,7 +171,6 @@ HTML_CLIENT = """
             const hull = new THREE.Mesh(hullGeo, hullMat);
             group.add(hull);
 
-            // Thruster Plume
             const engineGeo = new THREE.CylinderGeometry(2.5, 0, 14, 8);
             engineGeo.rotateX(-Math.PI / 2);
             const engineMat = new THREE.MeshStandardMaterial({ 
@@ -224,7 +229,7 @@ HTML_CLIENT = """
             if (data.type === 'init') {
                 localPlayerId = data.id;
                 if (!gameState.players[localPlayerId]) {
-                    gameState.players[localPlayerId] = { x: 200, y: 0, z: 0, angle: 0, vx: 0, vy: 0 };
+                    gameState.players[localPlayerId] = { x: 200, y: 0, z: 0, angle: 0, vx: 0, vy: 0, vz: 0 };
                 }
                 return;
             }
@@ -265,7 +270,6 @@ HTML_CLIENT = """
                 if (keys['ArrowRight'] || keys['d'] || keys['D']) me.angle += 0.03;
                 
                 // Thrust Forward
-
                 const currentSpeed = Math.sqrt(me.vx * me.vx + me.vy * me.vy + me.vz * me.vz);
                 const maxSpeed = 20;
                 
@@ -346,6 +350,7 @@ HTML_CLIENT = """
                 }
             }
         }
+
         // ==============================================================================
         // 6. CHASE CAMERA CONTROLS
         // ==============================================================================
@@ -376,29 +381,29 @@ HTML_CLIENT = """
             requestAnimationFrame(animate);
             updateLocalPhysics();
             updateParticles();
-        
+
             stationMesh.rotation.y += 0.005;
-        
+
             for (let id in gameState.players) {
                 const p = gameState.players[id];
                 if (!p) continue;
-        
+
                 if (!shipMeshes[id]) {
                     shipMeshes[id] = createShipMesh(id === localPlayerId);
                     scene.add(shipMeshes[id]);
                 }
-        
+
                 shipMeshes[id].position.x = p.x;
                 shipMeshes[id].position.y = p.z || 0;
                 shipMeshes[id].position.z = p.y;
                 shipMeshes[id].rotation.y = -p.angle;
             }
-        
+
             const me = gameState.players[localPlayerId];
             if (me && shipMeshes[localPlayerId]) {
                 updateCameraPosition(me);
-        
-                // Update Origin Line Endpoints (From 0,0,0 to Player Position)
+
+                // Update line pointing to origin
                 const posArr = originLine.geometry.attributes.position.array;
                 posArr[0] = 0;     // Origin X
                 posArr[1] = 0;     // Origin Y
@@ -407,14 +412,14 @@ HTML_CLIENT = """
                 posArr[4] = me.z;  // Ship Y (Altitude)
                 posArr[5] = me.y;  // Ship Z
                 originLine.geometry.attributes.position.needsUpdate = true;
-        
+
                 const spd = Math.sqrt(me.vx * me.vx + me.vy * me.vy + (me.vz || 0) * (me.vz || 0)).toFixed(1);
                 document.getElementById('pos-x').innerText = Math.round(me.x);
                 document.getElementById('pos-z').innerText = Math.round(me.y);
                 document.getElementById('pos-y').innerText = Math.round(me.z || 0);
                 document.getElementById('speed').innerText = spd;
             }
-        
+
             renderer.render(scene, camera);
         }
 
@@ -440,7 +445,7 @@ class ConnectionManager:
         await websocket.accept()
         self.active_connections[player_id] = websocket
         game_state["players"][player_id] = {
-            "x": 200, "y": 0, "z": 0, "angle": 0, "vx": 0, "vy": 0
+            "x": 200, "y": 0, "z": 0, "angle": 0, "vx": 0, "vy": 0, "vz": 0
         }
         await websocket.send_text(json.dumps({"type": "init", "id": player_id}))
 
@@ -482,6 +487,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     player["angle"] = payload.get("angle", player["angle"])
                     player["vx"] = payload.get("vx", player["vx"])
                     player["vy"] = payload.get("vy", player["vy"])
+                    player["vz"] = payload.get("vz", player.get("vz", 0))
     except WebSocketDisconnect:
         manager.disconnect(player_id)
 
