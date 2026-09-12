@@ -15,7 +15,7 @@ HTML_CLIENT = """
 <!DOCTYPE html>
 <html>
 <head>
-    <title>tuff no man sky clone</title>
+    <title>Infinite Synced Space Sandbox 3D</title>
     <style>
         body { 
             margin: 0; 
@@ -45,6 +45,7 @@ HTML_CLIENT = """
 </head>
 <body>
     <div id="ui">
+        <h3 style="margin-top: 0; color: #00ffff; text-shadow: 0 0 8px #00ffff;">3D Infinite Warp Flight Deck</h3>
         <p>Position: X <span id="pos-x" class="stat">0</span> | Z <span id="pos-z" class="stat">0</span> | Alt <span id="pos-y" class="stat">0</span></p>
         <p>Speed: <span id="speed" class="stat">0</span> m/s</p>
         <p>Pilots Online: <span id="player-count" class="stat">0</span></p>
@@ -80,38 +81,90 @@ HTML_CLIENT = """
         }
 
         // ==============================================================================
-        // PROCEDURAL PLANET TEXTURE GENERATOR
+        // SEAMLESS 3D SPHERICAL PLANET TEXTURE & BUMP MAP GENERATOR
         // ==============================================================================
         function generatePlanetTexture(seed) {
             const simplex = new SimplexNoise(seed.toString());
+            
+            // Canvas 1: Color Map
             const canvas = document.createElement('canvas');
             canvas.width = 512;
             canvas.height = 256;
             const ctx = canvas.getContext('2d');
             const imgData = ctx.createImageData(canvas.width, canvas.height);
 
-            const r1 = seededRandom(seed) * 255;
-            const g1 = seededRandom(seed + 1) * 255;
-            const b1 = seededRandom(seed + 2) * 255;
+            // Canvas 2: Bump/Height Map
+            const bumpCanvas = document.createElement('canvas');
+            bumpCanvas.width = 512;
+            bumpCanvas.height = 256;
+            const bumpCtx = bumpCanvas.getContext('2d');
+            const bumpData = bumpCtx.createImageData(bumpCanvas.width, bumpCanvas.height);
 
-            const r2 = seededRandom(seed + 3) * 255;
-            const g2 = seededRandom(seed + 4) * 255;
-            const b2 = seededRandom(seed + 5) * 255;
+            // Derive distinct colors using seeded random
+            const oceanR = Math.floor(seededRandom(seed) * 50);
+            const oceanG = Math.floor(seededRandom(seed + 1) * 120 + 50);
+            const oceanB = Math.floor(seededRandom(seed + 2) * 180 + 75);
+
+            const landR = Math.floor(seededRandom(seed + 3) * 180 + 40);
+            const landG = Math.floor(seededRandom(seed + 4) * 180 + 40);
+            const landB = Math.floor(seededRandom(seed + 5) * 80 + 20);
+
+            const seaLevel = 0.48; // Threshold separating land and ocean
 
             for (let y = 0; y < canvas.height; y++) {
+                const v = y / canvas.height;
+                const lat = (v - 0.5) * Math.PI; // -PI/2 to PI/2
+                const sinLat = Math.sin(lat);
+                const cosLat = Math.cos(lat);
+
                 for (let x = 0; x < canvas.width; x++) {
-                    let noiseValue = simplex.noise2D(x * 0.005, y * 0.005) * 0.5 + 0.5;
+                    const u = x / canvas.width;
+                    const lon = u * Math.PI * 2; // 0 to 2*PI
+
+                    // Seamless 3D coordinates on a sphere
+                    const nx = cosLat * Math.cos(lon) * 1.5;
+                    const ny = sinLat * 1.5;
+                    const nz = cosLat * Math.sin(lon) * 1.5;
+
+                    // Sample multi-frequency noise for detailed terrain
+                    let noiseVal = (simplex.noise3D(nx, ny, nz) + 1) * 0.5;
+                    let detail = (simplex.noise3D(nx * 3, ny * 3, nz * 3)) * 0.15;
+                    let totalHeight = Math.max(0, Math.min(1, noiseVal + detail));
 
                     const i = (y * canvas.width + x) * 4;
-                    imgData.data[i]     = r1 * noiseValue + r2 * (1 - noiseValue);
-                    imgData.data[i + 1] = g1 * noiseValue + g2 * (1 - noiseValue);
-                    imgData.data[i + 2] = b1 * noiseValue + b2 * (1 - noiseValue);
+
+                    if (totalHeight < seaLevel) {
+                        // Ocean pixels: deep, smooth color
+                        const oceanDepth = totalHeight / seaLevel;
+                        imgData.data[i]     = oceanR * oceanDepth;
+                        imgData.data[i + 1] = oceanG * oceanDepth;
+                        imgData.data[i + 2] = oceanB * oceanDepth;
+                        
+                        // Flat height map for water
+                        bumpData.data[i] = bumpData.data[i+1] = bumpData.data[i+2] = 0;
+                    } else {
+                        // Land pixels: distinctive continent color with elevation shading
+                        const landElev = (totalHeight - seaLevel) / (1 - seaLevel);
+                        imgData.data[i]     = Math.min(255, landR + landElev * 60);
+                        imgData.data[i + 1] = Math.min(255, landG + landElev * 60);
+                        imgData.data[i + 2] = Math.min(255, landB + landElev * 40);
+
+                        // High relief for land heightmap
+                        const heightByte = Math.floor(landElev * 255);
+                        bumpData.data[i] = bumpData.data[i+1] = bumpData.data[i+2] = heightByte;
+                    }
                     imgData.data[i + 3] = 255;
+                    bumpData.data[i + 3] = 255;
                 }
             }
 
             ctx.putImageData(imgData, 0, 0);
-            return new THREE.CanvasTexture(canvas);
+            bumpCtx.putImageData(bumpData, 0, 0);
+
+            return {
+                colorMap: new THREE.CanvasTexture(canvas),
+                bumpMap: new THREE.CanvasTexture(bumpCanvas)
+            };
         }
 
         // ==============================================================================
@@ -120,7 +173,7 @@ HTML_CLIENT = """
         const PLANET_CHUNK_SIZE = 8000;
         const PLANET_DRAW_RADIUS = 2;
         const planetChunks = {};
-        const planetGeo = new THREE.SphereGeometry(1, 32, 32);
+        const planetGeo = new THREE.SphereGeometry(1, 48, 48);
 
         function createPlanetChunk(cx, cy, cz) {
             const key = `${cx},${cy},${cz}`;
@@ -144,12 +197,15 @@ HTML_CLIENT = """
             seed++;
             const radius = 300 + seededRandom(seed) * 500;
             
-            // Generate seed-driven procedural noise texture
-            const planetTexture = generatePlanetTexture(seed);
+            // Generate seamless color map and height/bump map
+            const maps = generatePlanetTexture(seed);
 
             const mat = new THREE.MeshStandardMaterial({ 
-                map: planetTexture, 
-                roughness: 0.85 
+                map: maps.colorMap,
+                bumpMap: maps.bumpMap,
+                bumpScale: 12.0,
+                roughness: 0.6,
+                metalness: 0.1
             });
 
             const mesh = new THREE.Mesh(planetGeo, mat);
@@ -192,7 +248,8 @@ HTML_CLIENT = """
                 if (!activeKeys.has(key)) {
                     if (planetChunks[key] && planetChunks[key].mesh) {
                         scene.remove(planetChunks[key].mesh);
-                        planetChunks[key].mesh.material.map.dispose();
+                        if (planetChunks[key].mesh.material.map) planetChunks[key].mesh.material.map.dispose();
+                        if (planetChunks[key].mesh.material.bumpMap) planetChunks[key].mesh.material.bumpMap.dispose();
                         planetChunks[key].mesh.material.dispose();
                     }
                     delete planetChunks[key];
