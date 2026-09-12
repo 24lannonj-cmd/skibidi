@@ -58,10 +58,10 @@ HTML_CLIENT = """
         // 2. THREE.JS SCENE SETUP & LIGHTING
         // ==============================================================================
         const scene = new THREE.Scene();
-        scene.fog = new THREE.FogExp2(0x020208, 0.0001);
+        scene.fog = new THREE.FogExp2(0x020208, 0.00005);
 
-        // Extended far clipping distance to render colossal scale planets
-        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100000);
+        // Render distance expanded for colossal planets
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 250000);
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setPixelRatio(window.devicePixelRatio);
@@ -71,7 +71,7 @@ HTML_CLIENT = """
         scene.add(ambientLight);
 
         const sunLight = new THREE.DirectionalLight(0xffffff, 2.0);
-        sunLight.position.set(5000, 10000, 5000);
+        sunLight.position.set(15000, 30000, 15000);
         scene.add(sunLight);
 
         const GLOBAL_SEED = 987654321;
@@ -160,10 +160,9 @@ HTML_CLIENT = """
         }
 
         // ==============================================================================
-        // INFINITE MASSIVE PLANETS MANAGER
+        // COLOSSAL PLANETS MANAGER
         // ==============================================================================
-        // Chunk spacing expanded to 35,000 for realistic interstellar gaps
-        const PLANET_CHUNK_SIZE = 35000;
+        const PLANET_CHUNK_SIZE = 60000;
         const PLANET_DRAW_RADIUS = 2;
         const planetChunks = {};
         const planetGeo = new THREE.SphereGeometry(1, 64, 64);
@@ -175,8 +174,7 @@ HTML_CLIENT = """
             let seed = (cx * 73856093) ^ (cy * 19349663) ^ (cz * 83492791) ^ GLOBAL_SEED;
 
             seed++;
-            // Sparse distribution threshold (fewer planets)
-            if (seededRandom(seed) > 0.30) {
+            if (seededRandom(seed) > 0.25) {
                 planetChunks[key] = null;
                 return;
             }
@@ -189,15 +187,15 @@ HTML_CLIENT = """
             const pz = (cz + seededRandom(seed)) * PLANET_CHUNK_SIZE;
 
             seed++;
-            // Massive scale planets (3,000 to 8,000 radius)
-            const radius = 3000 + seededRandom(seed) * 5000;
+            // Increased radius (8,000 to 20,000)
+            const radius = 8000 + seededRandom(seed) * 12000;
             
             const maps = generatePlanetTexture(seed);
 
             const mat = new THREE.MeshStandardMaterial({ 
                 map: maps.colorMap,
                 bumpMap: maps.bumpMap,
-                bumpScale: radius * 0.02, // Height scaling relative to huge size
+                bumpScale: radius * 0.04, // Larger bump intensity for mountain relief
                 roughness: 0.65,
                 metalness: 0.1
             });
@@ -258,11 +256,11 @@ HTML_CLIENT = """
         }
 
         // ==============================================================================
-        // OPTIMIZED WARP STARFIELD (LINES WHEN MOVING, SQUARE POINTS WHEN STILL)
+        // LAG-FREE WARP STARFIELD (SPAWN AS POINTS, STRETCH AFTER)
         // ==============================================================================
-        const STAR_CHUNK_SIZE = 4000;
-        const STAR_DRAW_RADIUS = 1; // Reduced draw radius for lag-free performance
-        const STARS_PER_CHUNK = 60;  // Reduced count per chunk
+        const STAR_CHUNK_SIZE = 5000;
+        const STAR_DRAW_RADIUS = 1;
+        const STARS_PER_CHUNK = 40; // Extremely lightweight to prevent lag
         const starChunks = {};
 
         function createStarChunk(cx, cy, cz) {
@@ -282,6 +280,7 @@ HTML_CLIENT = """
                 const rz = seededRandom(seed) * STAR_CHUNK_SIZE + cz * STAR_CHUNK_SIZE;
                 
                 basePoints.push({ x: rx, y: ry, z: rz });
+                // Initialized with 0 stretch so stars spawn cleanly as un-stretched points
                 linePositions.push(rx, ry, rz, rx, ry, rz);
             }
 
@@ -289,15 +288,15 @@ HTML_CLIENT = """
             starGeo.setAttribute('position', new THREE.Float32BufferAttribute(linePositions, 3));
             
             const starMat = new THREE.LineBasicMaterial({ 
-                color: 0xaaddee, 
+                color: 0x99ddff, 
                 transparent: true, 
-                opacity: 0.85 
+                opacity: 0.8
             });
 
             const lineSegments = new THREE.LineSegments(starGeo, starMat);
             
             scene.add(lineSegments);
-            starChunks[key] = { mesh: lineSegments, points: basePoints };
+            starChunks[key] = { mesh: lineSegments, points: basePoints, currentStretch: 0 };
         }
 
         function updateStarChunks(playerX, playerY, playerZ, vx, vy, vz) {
@@ -308,9 +307,7 @@ HTML_CLIENT = """
             const activeKeys = new Set();
             const speed = Math.sqrt(vx * vx + vy * vy + vz * vz);
             
-            // If speed is negligible, collapse tail back to head so stars render as sharp point squares
-            const isMoving = speed > 0.1;
-            const stretchFactor = isMoving ? Math.min(speed * 3.5, 90) : 0;
+            const targetStretch = speed > 0.1 ? Math.min(speed * 3.0, 80) : 0;
 
             for (let x = -STAR_DRAW_RADIUS; x <= STAR_DRAW_RADIUS; x++) {
                 for (let y = -STAR_DRAW_RADIUS; y <= STAR_DRAW_RADIUS; y++) {
@@ -325,24 +322,25 @@ HTML_CLIENT = """
 
                         if (starChunks[key]) {
                             const chunk = starChunks[key];
+                            // Interpolate stretch smoothly so newly spawned stars stretch after spawn
+                            chunk.currentStretch += (targetStretch - chunk.currentStretch) * 0.15;
+                            
                             const pos = chunk.mesh.geometry.attributes.position.array;
                             
                             for (let i = 0; i < chunk.points.length; i++) {
                                 const pt = chunk.points[i];
                                 const idx = i * 6;
                                 
-                                // Point A (Head)
                                 pos[idx]     = pt.x;
                                 pos[idx + 1] = pt.y;
                                 pos[idx + 2] = pt.z;
 
-                                // Point B (Tail - stretches opposite velocity vector)
-                                if (isMoving) {
-                                    pos[idx + 3] = pt.x - vx * stretchFactor * 0.1;
-                                    pos[idx + 4] = pt.y - vz * stretchFactor * 0.1;
-                                    pos[idx + 5] = pt.z - vy * stretchFactor * 0.1;
+                                if (chunk.currentStretch > 0.05) {
+                                    pos[idx + 3] = pt.x - vx * chunk.currentStretch * 0.1;
+                                    pos[idx + 4] = pt.y - vz * chunk.currentStretch * 0.1;
+                                    pos[idx + 5] = pt.z - vy * chunk.currentStretch * 0.1;
                                 } else {
-                                    // When stationary, head & tail share exact position (rendering as a square point)
+                                    // Stationary square point rendering
                                     pos[idx + 3] = pt.x;
                                     pos[idx + 4] = pt.y;
                                     pos[idx + 5] = pt.z;
@@ -619,7 +617,6 @@ HTML_CLIENT = """
 
             stationMesh.rotation.y += 0.005;
 
-            // Render remote players
             for (let id in gameState.players) {
                 const p = gameState.players[id];
                 if (!p) continue;
@@ -646,7 +643,6 @@ HTML_CLIENT = """
             if (me && shipMeshes[localPlayerId]) {
                 updateCameraPosition(me);
 
-                // Update Warp Star Fields & Planet Chunks
                 updateStarChunks(me.x, me.z || 0, me.y, me.vx, me.vy, me.vz || 0);
                 updatePlanetChunks(me.x, me.z || 0, me.y);
 
