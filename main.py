@@ -38,11 +38,14 @@ HTML_CLIENT = """
         }
         .stat { color: #00ffff; }
     </style>
+    <!-- Three.js Library -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- Simplex Noise Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/simplex-noise/2.4.0/simplex-noise.min.js"></script>
 </head>
 <body>
     <div id="ui">
-        <h3 style="margin-top: 0; color: #00ffff; text-shadow: 0 0 8px #00ffff;">3D Infinite Flight Deck</h3>
+        <h3 style="margin-top: 0; color: #00ffff; text-shadow: 0 0 8px #00ffff;">3D Infinite Warp Flight Deck</h3>
         <p>Position: X <span id="pos-x" class="stat">0</span> | Z <span id="pos-z" class="stat">0</span> | Alt <span id="pos-y" class="stat">0</span></p>
         <p>Speed: <span id="speed" class="stat">0</span> m/s</p>
         <p>Pilots Online: <span id="player-count" class="stat">0</span></p>
@@ -63,7 +66,6 @@ HTML_CLIENT = """
         renderer.setPixelRatio(window.devicePixelRatio);
         document.body.appendChild(renderer.domElement);
 
-        // Lighting
         const ambientLight = new THREE.AmbientLight(0x333355, 1.5);
         scene.add(ambientLight);
 
@@ -71,10 +73,7 @@ HTML_CLIENT = """
         sunLight.position.set(500, 1000, 500);
         scene.add(sunLight);
 
-        // ==============================================================================
-        // DETERMINISTIC RANDOM GENERATOR & PROCEDURAL UTILITIES
-        // ==============================================================================
-        const GLOBAL_SEED = 987654321; // Global seed shared by all players
+        const GLOBAL_SEED = 987654321;
 
         function seededRandom(seed) {
             const x = Math.sin(seed) * 10000;
@@ -82,12 +81,47 @@ HTML_CLIENT = """
         }
 
         // ==============================================================================
-        // INFINITE PROCEDURAL PLANETS MANAGER (SYNCED VIA CHUNKS)
+        // PROCEDURAL PLANET TEXTURE GENERATOR
         // ==============================================================================
-        const PLANET_CHUNK_SIZE = 8000; // Size of each planet chunk grid block
-        const PLANET_DRAW_RADIUS = 2;   // Number of chunks rendered in every direction
+        function generatePlanetTexture(seed) {
+            const simplex = new SimplexNoise(seed.toString());
+            const canvas = document.createElement('canvas');
+            canvas.width = 512;
+            canvas.height = 256;
+            const ctx = canvas.getContext('2d');
+            const imgData = ctx.createImageData(canvas.width, canvas.height);
+
+            const r1 = seededRandom(seed) * 255;
+            const g1 = seededRandom(seed + 1) * 255;
+            const b1 = seededRandom(seed + 2) * 255;
+
+            const r2 = seededRandom(seed + 3) * 255;
+            const g2 = seededRandom(seed + 4) * 255;
+            const b2 = seededRandom(seed + 5) * 255;
+
+            for (let y = 0; y < canvas.height; y++) {
+                for (let x = 0; x < canvas.width; x++) {
+                    let noiseValue = simplex.noise2D(x * 0.005, y * 0.005) * 0.5 + 0.5;
+
+                    const i = (y * canvas.width + x) * 4;
+                    imgData.data[i]     = r1 * noiseValue + r2 * (1 - noiseValue);
+                    imgData.data[i + 1] = g1 * noiseValue + g2 * (1 - noiseValue);
+                    imgData.data[i + 2] = b1 * noiseValue + b2 * (1 - noiseValue);
+                    imgData.data[i + 3] = 255;
+                }
+            }
+
+            ctx.putImageData(imgData, 0, 0);
+            return new THREE.CanvasTexture(canvas);
+        }
+
+        // ==============================================================================
+        // INFINITE PROCEDURAL PLANETS MANAGER
+        // ==============================================================================
+        const PLANET_CHUNK_SIZE = 8000;
+        const PLANET_DRAW_RADIUS = 2;
         const planetChunks = {};
-        const planetGeo = new THREE.SphereGeometry(1, 32, 32); // Scalable base geometry
+        const planetGeo = new THREE.SphereGeometry(1, 32, 32);
 
         function createPlanetChunk(cx, cy, cz) {
             const key = `${cx},${cy},${cz}`;
@@ -95,14 +129,12 @@ HTML_CLIENT = """
 
             let seed = (cx * 73856093) ^ (cy * 19349663) ^ (cz * 83492791) ^ GLOBAL_SEED;
 
-            // 40% chance of a chunk having a planet
             seed++;
             if (seededRandom(seed) > 0.40) {
-                planetChunks[key] = null; // Empty space chunk
+                planetChunks[key] = null;
                 return;
             }
 
-            // Deterministic position inside chunk
             seed++;
             const px = (cx + seededRandom(seed)) * PLANET_CHUNK_SIZE;
             seed++;
@@ -110,23 +142,19 @@ HTML_CLIENT = """
             seed++;
             const pz = (cz + seededRandom(seed)) * PLANET_CHUNK_SIZE;
 
-            // Deterministic properties
             seed++;
             const radius = 300 + seededRandom(seed) * 500;
-            seed++;
-            const r = seededRandom(seed);
-            seed++;
-            const g = seededRandom(seed);
-            seed++;
-            const b = seededRandom(seed);
             
+            // Generate seed-driven procedural noise texture
+            const planetTexture = generatePlanetTexture(seed);
+
             const mat = new THREE.MeshStandardMaterial({ 
-                color: new THREE.Color(r, g, b), 
-                roughness: 0.8 
+                map: planetTexture, 
+                roughness: 0.85 
             });
 
             const mesh = new THREE.Mesh(planetGeo, mat);
-            mesh.position.set(px, pz, py); // Note: THREE.js Z is world depth, map y->z
+            mesh.position.set(px, pz, py);
             mesh.scale.set(radius, radius, radius);
 
             scene.add(mesh);
@@ -161,18 +189,17 @@ HTML_CLIENT = """
                 }
             }
 
-            // Cleanup distant planet chunks
             for (let key in planetChunks) {
                 if (!activeKeys.has(key)) {
                     if (planetChunks[key] && planetChunks[key].mesh) {
                         scene.remove(planetChunks[key].mesh);
+                        planetChunks[key].mesh.material.map.dispose();
                         planetChunks[key].mesh.material.dispose();
                     }
                     delete planetChunks[key];
                 }
             }
 
-            // Update UI count
             let totalPlanets = 0;
             for (let key in planetChunks) {
                 if (planetChunks[key]) totalPlanets++;
@@ -181,21 +208,21 @@ HTML_CLIENT = """
         }
 
         // ==============================================================================
-        // INFINITE STAR CHUNK MANAGER
+        // WARP SPEED STRETCHING & GLOWING STAR FIELD (LINE SEGMENTS)
         // ==============================================================================
-        const STAR_CHUNK_SIZE = 2000;
+        const STAR_CHUNK_SIZE = 2500;
         const STAR_DRAW_RADIUS = 2;
-        const STARS_PER_CHUNK = 250;
+        const STARS_PER_CHUNK = 200;
         const starChunks = {};
 
         function createStarChunk(cx, cy, cz) {
             const key = `${cx},${cy},${cz}`;
             if (starChunks[key]) return;
 
-            const starGeo = new THREE.BufferGeometry();
-            const starCoords = [];
+            const linePositions = [];
             let seed = (cx * 73856093) ^ (cy * 19349663) ^ (cz * 83492791) ^ GLOBAL_SEED;
 
+            const basePoints = [];
             for (let i = 0; i < STARS_PER_CHUNK; i++) {
                 seed++;
                 const rx = seededRandom(seed) * STAR_CHUNK_SIZE + cx * STAR_CHUNK_SIZE;
@@ -203,23 +230,34 @@ HTML_CLIENT = """
                 const ry = seededRandom(seed) * STAR_CHUNK_SIZE + cy * STAR_CHUNK_SIZE;
                 seed++;
                 const rz = seededRandom(seed) * STAR_CHUNK_SIZE + cz * STAR_CHUNK_SIZE;
-                starCoords.push(rx, ry, rz);
+                
+                basePoints.push({ x: rx, y: ry, z: rz });
+                linePositions.push(rx, ry, rz, rx, ry, rz); // Pair of points: Head and Tail
             }
 
-            starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starCoords, 3));
-            const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 1.5 });
-            const chunkMesh = new THREE.Points(starGeo, starMat);
+            const starGeo = new THREE.BufferGeometry();
+            starGeo.setAttribute('position', new THREE.Float32BufferAttribute(linePositions, 3));
             
-            scene.add(chunkMesh);
-            starChunks[key] = chunkMesh;
+            const starMat = new THREE.LineBasicMaterial({ 
+                color: 0x88eeff, 
+                transparent: true, 
+                opacity: 0.85 
+            });
+
+            const lineSegments = new THREE.LineSegments(starGeo, starMat);
+            
+            scene.add(lineSegments);
+            starChunks[key] = { mesh: lineSegments, points: basePoints };
         }
 
-        function updateStarChunks(playerX, playerY, playerZ) {
+        function updateStarChunks(playerX, playerY, playerZ, vx, vy, vz) {
             const currentChunkX = Math.floor(playerX / STAR_CHUNK_SIZE);
             const currentChunkY = Math.floor(playerY / STAR_CHUNK_SIZE);
             const currentChunkZ = Math.floor(playerZ / STAR_CHUNK_SIZE);
 
             const activeKeys = new Set();
+            const speed = Math.sqrt(vx * vx + vy * vy + vz * vz);
+            const stretchFactor = Math.min(speed * 3.5, 80);
 
             for (let x = -STAR_DRAW_RADIUS; x <= STAR_DRAW_RADIUS; x++) {
                 for (let y = -STAR_DRAW_RADIUS; y <= STAR_DRAW_RADIUS; y++) {
@@ -231,15 +269,36 @@ HTML_CLIENT = """
                         
                         activeKeys.add(key);
                         createStarChunk(cx, cy, cz);
+
+                        if (starChunks[key]) {
+                            const chunk = starChunks[key];
+                            const pos = chunk.mesh.geometry.attributes.position.array;
+                            
+                            for (let i = 0; i < chunk.points.length; i++) {
+                                const pt = chunk.points[i];
+                                const idx = i * 6;
+                                
+                                // Head point (fixed position)
+                                pos[idx] = pt.x;
+                                pos[idx + 1] = pt.y;
+                                pos[idx + 2] = pt.z;
+
+                                // Tail point (stretched opposite to velocity)
+                                pos[idx + 3] = pt.x - vx * stretchFactor * 0.1;
+                                pos[idx + 4] = pt.y - vz * stretchFactor * 0.1;
+                                pos[idx + 5] = pt.z - vy * stretchFactor * 0.1;
+                            }
+                            chunk.mesh.geometry.attributes.position.needsUpdate = true;
+                        }
                     }
                 }
             }
 
             for (let key in starChunks) {
                 if (!activeKeys.has(key)) {
-                    scene.remove(starChunks[key]);
-                    starChunks[key].geometry.dispose();
-                    starChunks[key].material.dispose();
+                    scene.remove(starChunks[key].mesh);
+                    starChunks[key].mesh.geometry.dispose();
+                    starChunks[key].mesh.material.dispose();
                     delete starChunks[key];
                 }
             }
@@ -387,7 +446,7 @@ HTML_CLIENT = """
         };
 
         // ==============================================================================
-        // MOVEMENT & COLLISION PHYSICS WITH INFINITE PLANETS
+        // MOVEMENT & PHYSICS
         // ==============================================================================
         function updateLocalPhysics() {
             if (localPlayerId && gameState.players[localPlayerId]) {
@@ -400,12 +459,12 @@ HTML_CLIENT = """
                 if (keys['ArrowRight'] || keys['d'] || keys['D']) me.angle += 0.03;
                 
                 const currentSpeed = Math.sqrt(me.vx * me.vx + me.vy * me.vy + me.vz * me.vz);
-                const maxSpeed = 25;
+                const maxSpeed = 35;
                 
                 if (keys['ArrowUp'] || keys['w'] || keys['W']) {
                     if (currentSpeed < maxSpeed) {
-                        me.vx += Math.sin(me.angle) * 0.35;
-                        me.vy -= Math.cos(me.angle) * 0.35;
+                        me.vx += Math.sin(me.angle) * 0.45;
+                        me.vy -= Math.cos(me.angle) * 0.45;
                     }
                     spawnTrailParticle(me.x, me.y, me.z, me.angle);
                 }
@@ -416,8 +475,8 @@ HTML_CLIENT = """
                     me.vz *= 0.90;
                 }
 
-                if (keys['x'] || keys['X']) me.vz += 0.35;
-                if (keys['z'] || keys['Z']) me.vz -= 0.35;
+                if (keys['x'] || keys['X']) me.vz += 0.45;
+                if (keys['z'] || keys['Z']) me.vz -= 0.45;
         
                 me.x += me.vx;
                 me.y += me.vy;
@@ -427,14 +486,13 @@ HTML_CLIENT = """
                 me.vy *= 0.987;
                 me.vz *= 0.950;
         
-                // Collision testing with local dynamic planet chunks
                 const shipRadius = 12;
                 for (let key in planetChunks) {
                     const planet = planetChunks[key];
                     if (!planet) continue;
                     
                     const dx = me.x - planet.x;
-                    const dy = me.z - planet.z; // THREE.js Height mapping
+                    const dy = me.z - planet.z; 
                     const dz = me.y - planet.y;
                     const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
                     const minDist = planet.radius + shipRadius;
@@ -501,7 +559,7 @@ HTML_CLIENT = """
 
             stationMesh.rotation.y += 0.005;
 
-            // Render and smooth remote ships
+            // Render remote players
             for (let id in gameState.players) {
                 const p = gameState.players[id];
                 if (!p) continue;
@@ -517,7 +575,6 @@ HTML_CLIENT = """
                     shipMeshes[id].position.z = p.y;
                     shipMeshes[id].rotation.y = -p.angle;
                 } else {
-                    // Smooth lerp interpolation for remote players
                     shipMeshes[id].position.x += (p.x - shipMeshes[id].position.x) * 0.25;
                     shipMeshes[id].position.y += ((p.z || 0) - shipMeshes[id].position.y) * 0.25;
                     shipMeshes[id].position.z += (p.y - shipMeshes[id].position.z) * 0.25;
@@ -529,8 +586,8 @@ HTML_CLIENT = """
             if (me && shipMeshes[localPlayerId]) {
                 updateCameraPosition(me);
 
-                // Stream procedural world infinite chunks around local player
-                updateStarChunks(me.x, me.z || 0, me.y);
+                // Update Warp Star Fields & Planet Chunks
+                updateStarChunks(me.x, me.z || 0, me.y, me.vx, me.vy, me.vz || 0);
                 updatePlanetChunks(me.x, me.z || 0, me.y);
 
                 const posArr = originLine.geometry.attributes.position.array;
@@ -559,7 +616,7 @@ HTML_CLIENT = """
 """
 
 # ==============================================================================
-# 8. BACKEND GAME STATE & FASTAPI SERVER
+# BACKEND GAME STATE & FASTAPI SERVER
 # ==============================================================================
 game_state = {
     "station": {"x": 0, "y": 0, "radius": 80},
