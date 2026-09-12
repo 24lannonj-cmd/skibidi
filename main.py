@@ -15,7 +15,7 @@ HTML_CLIENT = """
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Space Sandbox 3D</title>
+    <title>Infinite Synced Space Sandbox 3D</title>
     <style>
         body { 
             margin: 0; 
@@ -42,10 +42,11 @@ HTML_CLIENT = """
 </head>
 <body>
     <div id="ui">
-        <h3 style="margin-top: 0; color: #00ffff; text-shadow: 0 0 8px #00ffff;">3D Flight Deck</h3>
+        <h3 style="margin-top: 0; color: #00ffff; text-shadow: 0 0 8px #00ffff;">3D Infinite Flight Deck</h3>
         <p>Position: X <span id="pos-x" class="stat">0</span> | Z <span id="pos-z" class="stat">0</span> | Alt <span id="pos-y" class="stat">0</span></p>
         <p>Speed: <span id="speed" class="stat">0</span> m/s</p>
         <p>Pilots Online: <span id="player-count" class="stat">0</span></p>
+        <p>Active Planets: <span id="planet-count" class="stat">0</span></p>
         <p>Controls: WASD (Forward/Turn), X/Z (Ascend/Descend)</p>
     </div>
 
@@ -54,9 +55,9 @@ HTML_CLIENT = """
         // 2. THREE.JS SCENE SETUP & LIGHTING
         // ==============================================================================
         const scene = new THREE.Scene();
-        scene.fog = new THREE.FogExp2(0x020208, 0.0005);
+        scene.fog = new THREE.FogExp2(0x020208, 0.0002);
 
-        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 15000);
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 40000);
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setPixelRatio(window.devicePixelRatio);
@@ -70,17 +71,120 @@ HTML_CLIENT = """
         sunLight.position.set(500, 1000, 500);
         scene.add(sunLight);
 
-        // Deterministic Pseudo-Random Generator (Ensures identical universe across all clients)
+        // ==============================================================================
+        // DETERMINISTIC RANDOM GENERATOR & PROCEDURAL UTILITIES
+        // ==============================================================================
+        const GLOBAL_SEED = 987654321; // Global seed shared by all players
+
         function seededRandom(seed) {
             const x = Math.sin(seed) * 10000;
             return x - Math.floor(x);
         }
 
         // ==============================================================================
-        // GRID-BASED STAR CHUNK MANAGER (SYNCED VIA SEED)
+        // INFINITE PROCEDURAL PLANETS MANAGER (SYNCED VIA CHUNKS)
         // ==============================================================================
-        const CHUNK_SIZE = 1500;
-        const DRAW_RADIUS = 2;
+        const PLANET_CHUNK_SIZE = 8000; // Size of each planet chunk grid block
+        const PLANET_DRAW_RADIUS = 2;   // Number of chunks rendered in every direction
+        const planetChunks = {};
+        const planetGeo = new THREE.SphereGeometry(1, 32, 32); // Scalable base geometry
+
+        function createPlanetChunk(cx, cy, cz) {
+            const key = `${cx},${cy},${cz}`;
+            if (planetChunks[key]) return;
+
+            let seed = (cx * 73856093) ^ (cy * 19349663) ^ (cz * 83492791) ^ GLOBAL_SEED;
+
+            // 40% chance of a chunk having a planet
+            seed++;
+            if (seededRandom(seed) > 0.40) {
+                planetChunks[key] = null; // Empty space chunk
+                return;
+            }
+
+            // Deterministic position inside chunk
+            seed++;
+            const px = (cx + seededRandom(seed)) * PLANET_CHUNK_SIZE;
+            seed++;
+            const py = (cy + seededRandom(seed)) * PLANET_CHUNK_SIZE;
+            seed++;
+            const pz = (cz + seededRandom(seed)) * PLANET_CHUNK_SIZE;
+
+            // Deterministic properties
+            seed++;
+            const radius = 300 + seededRandom(seed) * 500;
+            seed++;
+            const r = seededRandom(seed);
+            seed++;
+            const g = seededRandom(seed);
+            seed++;
+            const b = seededRandom(seed);
+            
+            const mat = new THREE.MeshStandardMaterial({ 
+                color: new THREE.Color(r, g, b), 
+                roughness: 0.8 
+            });
+
+            const mesh = new THREE.Mesh(planetGeo, mat);
+            mesh.position.set(px, pz, py); // Note: THREE.js Z is world depth, map y->z
+            mesh.scale.set(radius, radius, radius);
+
+            scene.add(mesh);
+
+            planetChunks[key] = {
+                mesh: mesh,
+                x: px,
+                y: py,
+                z: pz,
+                radius: radius
+            };
+        }
+
+        function updatePlanetChunks(playerX, playerY, playerZ) {
+            const currentChunkX = Math.floor(playerX / PLANET_CHUNK_SIZE);
+            const currentChunkY = Math.floor(playerY / PLANET_CHUNK_SIZE);
+            const currentChunkZ = Math.floor(playerZ / PLANET_CHUNK_SIZE);
+
+            const activeKeys = new Set();
+
+            for (let x = -PLANET_DRAW_RADIUS; x <= PLANET_DRAW_RADIUS; x++) {
+                for (let y = -PLANET_DRAW_RADIUS; y <= PLANET_DRAW_RADIUS; y++) {
+                    for (let z = -PLANET_DRAW_RADIUS; z <= PLANET_DRAW_RADIUS; z++) {
+                        const cx = currentChunkX + x;
+                        const cy = currentChunkY + y;
+                        const cz = currentChunkZ + z;
+                        const key = `${cx},${cy},${cz}`;
+                        
+                        activeKeys.add(key);
+                        createPlanetChunk(cx, cy, cz);
+                    }
+                }
+            }
+
+            // Cleanup distant planet chunks
+            for (let key in planetChunks) {
+                if (!activeKeys.has(key)) {
+                    if (planetChunks[key] && planetChunks[key].mesh) {
+                        scene.remove(planetChunks[key].mesh);
+                        planetChunks[key].mesh.material.dispose();
+                    }
+                    delete planetChunks[key];
+                }
+            }
+
+            // Update UI count
+            let totalPlanets = 0;
+            for (let key in planetChunks) {
+                if (planetChunks[key]) totalPlanets++;
+            }
+            document.getElementById('planet-count').innerText = totalPlanets;
+        }
+
+        // ==============================================================================
+        // INFINITE STAR CHUNK MANAGER
+        // ==============================================================================
+        const STAR_CHUNK_SIZE = 2000;
+        const STAR_DRAW_RADIUS = 2;
         const STARS_PER_CHUNK = 250;
         const starChunks = {};
 
@@ -90,20 +194,20 @@ HTML_CLIENT = """
 
             const starGeo = new THREE.BufferGeometry();
             const starCoords = [];
-            let seed = (cx * 73856093) ^ (cy * 19349663) ^ (cz * 83492791);
+            let seed = (cx * 73856093) ^ (cy * 19349663) ^ (cz * 83492791) ^ GLOBAL_SEED;
 
             for (let i = 0; i < STARS_PER_CHUNK; i++) {
                 seed++;
-                const rx = seededRandom(seed) * CHUNK_SIZE + cx * CHUNK_SIZE;
+                const rx = seededRandom(seed) * STAR_CHUNK_SIZE + cx * STAR_CHUNK_SIZE;
                 seed++;
-                const ry = seededRandom(seed) * CHUNK_SIZE + cy * CHUNK_SIZE;
+                const ry = seededRandom(seed) * STAR_CHUNK_SIZE + cy * STAR_CHUNK_SIZE;
                 seed++;
-                const rz = seededRandom(seed) * CHUNK_SIZE + cz * CHUNK_SIZE;
+                const rz = seededRandom(seed) * STAR_CHUNK_SIZE + cz * STAR_CHUNK_SIZE;
                 starCoords.push(rx, ry, rz);
             }
 
             starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starCoords, 3));
-            const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 1.2 });
+            const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 1.5 });
             const chunkMesh = new THREE.Points(starGeo, starMat);
             
             scene.add(chunkMesh);
@@ -111,15 +215,15 @@ HTML_CLIENT = """
         }
 
         function updateStarChunks(playerX, playerY, playerZ) {
-            const currentChunkX = Math.floor(playerX / CHUNK_SIZE);
-            const currentChunkY = Math.floor(playerY / CHUNK_SIZE);
-            const currentChunkZ = Math.floor(playerZ / CHUNK_SIZE);
+            const currentChunkX = Math.floor(playerX / STAR_CHUNK_SIZE);
+            const currentChunkY = Math.floor(playerY / STAR_CHUNK_SIZE);
+            const currentChunkZ = Math.floor(playerZ / STAR_CHUNK_SIZE);
 
             const activeKeys = new Set();
 
-            for (let x = -DRAW_RADIUS; x <= DRAW_RADIUS; x++) {
-                for (let y = -DRAW_RADIUS; y <= DRAW_RADIUS; y++) {
-                    for (let z = -DRAW_RADIUS; z <= DRAW_RADIUS; z++) {
+            for (let x = -STAR_DRAW_RADIUS; x <= STAR_DRAW_RADIUS; x++) {
+                for (let y = -STAR_DRAW_RADIUS; y <= STAR_DRAW_RADIUS; y++) {
+                    for (let z = -STAR_DRAW_RADIUS; z <= STAR_DRAW_RADIUS; z++) {
                         const cx = currentChunkX + x;
                         const cy = currentChunkY + y;
                         const cz = currentChunkZ + z;
@@ -142,36 +246,8 @@ HTML_CLIENT = """
         }
 
         // ==============================================================================
-        // PLANETS (DETERMINISTICALLY SYNCED ACROSS MULTIPLAYER)
+        // DYNAMIC ORIGIN LINE & EXHAUST PARTICLES
         // ==============================================================================
-        const planetRadius = 500;
-        const planetGeo = new THREE.SphereGeometry(planetRadius, 32, 32); 
-        const planetMat = new THREE.MeshStandardMaterial({ color: 0xde071c, roughness: 0.8 });
-        const planetCount = 10;
-        const planetData = [];
-
-        const planetMesh = new THREE.InstancedMesh(planetGeo, planetMat, planetCount);
-        const dummy = new THREE.Object3D();
-
-        let planetSeed = 12345; // Constant seed for global sync
-        for (let i = 0; i < planetCount; i++) {
-            planetSeed++;
-            const px = (seededRandom(planetSeed) - 0.5) * 10000;
-            planetSeed++;
-            const py = (seededRandom(planetSeed) - 0.5) * 10000;
-            planetSeed++;
-            const pz = (seededRandom(planetSeed) - 0.5) * 10000;
-
-            dummy.position.set(px, py, pz);
-            dummy.updateMatrix();
-            planetMesh.setMatrixAt(i, dummy.matrix);
-
-            planetData.push({ x: px, y: py, z: pz, radius: planetRadius });
-        }
-
-        scene.add(planetMesh);
-
-        // Dynamic Line Pointing to Origin (0,0,0)
         const lineGeo = new THREE.BufferGeometry();
         const linePositions = new Float32Array(6); 
         lineGeo.setAttribute('position', new THREE.BufferAttribute(linePositions, 3));
@@ -180,7 +256,6 @@ HTML_CLIENT = """
         originLine.frustumCulled = false;
         scene.add(originLine);
 
-        // Particle System for Exhaust Trail
         const trailParticles = [];
         const particleGeo = new THREE.SphereGeometry(1.2, 6, 6);
         const particleMat = new THREE.MeshBasicMaterial({ color: 0xff6600, transparent: true, opacity: 0.8 });
@@ -213,7 +288,7 @@ HTML_CLIENT = """
         }
 
         // ==============================================================================
-        // 3. 3D MODEL FACTORIES
+        // 3D MODEL FACTORIES
         // ==============================================================================
         function createShipMesh(isLocal) {
             const group = new THREE.Group();
@@ -262,7 +337,7 @@ HTML_CLIENT = """
         scene.add(stationMesh);
 
         // ==============================================================================
-        // 4. CLIENT STATE & WEBSOCKET HANDLING
+        // CLIENT STATE & WEBSOCKET HANDLING
         // ==============================================================================
         const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const wsUrl = `${wsProtocol}//${window.location.host}/ws`;
@@ -312,7 +387,7 @@ HTML_CLIENT = """
         };
 
         // ==============================================================================
-        // 5. MOVEMENT & SHIP PHYSICS
+        // MOVEMENT & COLLISION PHYSICS WITH INFINITE PLANETS
         // ==============================================================================
         function updateLocalPhysics() {
             if (localPlayerId && gameState.players[localPlayerId]) {
@@ -320,29 +395,29 @@ HTML_CLIENT = """
         
                 if (me.z === undefined || isNaN(me.z)) me.z = 0;
                 if (me.vz === undefined || isNaN(me.vz)) me.vz = 0;
-                // TURNING
+        
                 if (keys['ArrowLeft'] || keys['a'] || keys['A']) me.angle -= 0.03;
                 if (keys['ArrowRight'] || keys['d'] || keys['D']) me.angle += 0.03;
                 
                 const currentSpeed = Math.sqrt(me.vx * me.vx + me.vy * me.vy + me.vz * me.vz);
-                const maxSpeed = 20;
-                // THRUST
+                const maxSpeed = 25;
+                
                 if (keys['ArrowUp'] || keys['w'] || keys['W']) {
                     if (currentSpeed < maxSpeed) {
-                        me.vx += Math.sin(me.angle) * 0.3;
-                        me.vy -= Math.cos(me.angle) * 0.3;
+                        me.vx += Math.sin(me.angle) * 0.35;
+                        me.vy -= Math.cos(me.angle) * 0.35;
                     }
                     spawnTrailParticle(me.x, me.y, me.z, me.angle);
                 }
-                // BRAKING
+
                 if (keys['ArrowDown'] || keys['s'] || keys['S']) {
-                    me.vx *= 0.95;
-                    me.vy *= 0.95;
-                    me.vz *= 0.95;
+                    me.vx *= 0.90;
+                    me.vy *= 0.90;
+                    me.vz *= 0.90;
                 }
-                // ALTITUDE
-                if (keys['x'] || keys['X']) me.vz += 0.3;
-                if (keys['z'] || keys['Z']) me.vz -= 0.3;
+
+                if (keys['x'] || keys['X']) me.vz += 0.35;
+                if (keys['z'] || keys['Z']) me.vz -= 0.35;
         
                 me.x += me.vx;
                 me.y += me.vy;
@@ -352,13 +427,15 @@ HTML_CLIENT = """
                 me.vy *= 0.987;
                 me.vz *= 0.950;
         
+                // Collision testing with local dynamic planet chunks
                 const shipRadius = 12;
-                for (let i = 0; i < planetData.length; i++) {
-                    const planet = planetData[i];
+                for (let key in planetChunks) {
+                    const planet = planetChunks[key];
+                    if (!planet) continue;
                     
                     const dx = me.x - planet.x;
-                    const dy = me.z - planet.y; 
-                    const dz = me.y - planet.z;
+                    const dy = me.z - planet.z; // THREE.js Height mapping
+                    const dz = me.y - planet.y;
                     const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
                     const minDist = planet.radius + shipRadius;
         
@@ -392,7 +469,7 @@ HTML_CLIENT = """
         }
 
         // ==============================================================================
-        // 6. CHASE CAMERA CONTROLS
+        // CHASE CAMERA CONTROLS
         // ==============================================================================
         function updateCameraPosition(me) {
             const cameraDistance = 140; 
@@ -415,7 +492,7 @@ HTML_CLIENT = """
         }
 
         // ==============================================================================
-        // 7. MAIN GAME LOOP WITH INTERPOLATED MULTIPLAYER MOVEMENT
+        // MAIN GAME LOOP
         // ==============================================================================
         function animate() {
             requestAnimationFrame(animate);
@@ -424,7 +501,7 @@ HTML_CLIENT = """
 
             stationMesh.rotation.y += 0.005;
 
-            // Render and smooth out remote ships via linear interpolation
+            // Render and smooth remote ships
             for (let id in gameState.players) {
                 const p = gameState.players[id];
                 if (!p) continue;
@@ -435,20 +512,15 @@ HTML_CLIENT = """
                 }
 
                 if (id === localPlayerId) {
-                    // Instant update for local player
                     shipMeshes[id].position.x = p.x;
                     shipMeshes[id].position.y = p.z || 0;
                     shipMeshes[id].position.z = p.y;
                     shipMeshes[id].rotation.y = -p.angle;
                 } else {
-                    // Smooth lerp interpolation for remote players (eliminates network lag jitter)
-                    const targetX = p.x;
-                    const targetY = p.z || 0;
-                    const targetZ = p.y;
-
-                    shipMeshes[id].position.x += (targetX - shipMeshes[id].position.x) * 0.25;
-                    shipMeshes[id].position.y += (targetY - shipMeshes[id].position.y) * 0.25;
-                    shipMeshes[id].position.z += (targetZ - shipMeshes[id].position.z) * 0.25;
+                    // Smooth lerp interpolation for remote players
+                    shipMeshes[id].position.x += (p.x - shipMeshes[id].position.x) * 0.25;
+                    shipMeshes[id].position.y += ((p.z || 0) - shipMeshes[id].position.y) * 0.25;
+                    shipMeshes[id].position.z += (p.y - shipMeshes[id].position.z) * 0.25;
                     shipMeshes[id].rotation.y += (-p.angle - shipMeshes[id].rotation.y) * 0.25;
                 }
             }
@@ -457,7 +529,9 @@ HTML_CLIENT = """
             if (me && shipMeshes[localPlayerId]) {
                 updateCameraPosition(me);
 
+                // Stream procedural world infinite chunks around local player
                 updateStarChunks(me.x, me.z || 0, me.y);
+                updatePlanetChunks(me.x, me.z || 0, me.y);
 
                 const posArr = originLine.geometry.attributes.position.array;
                 posArr[0] = 0;     
@@ -549,7 +623,7 @@ async def websocket_endpoint(websocket: WebSocket):
 async def game_loop():
     while True:
         await manager.broadcast_state()
-        await asyncio.sleep(1 / 30) # Increased broadcast rate to 30 FPS for lower latency
+        await asyncio.sleep(1 / 30)
 
 @app.on_event("startup")
 async def startup_event():
