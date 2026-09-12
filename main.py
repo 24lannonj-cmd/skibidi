@@ -15,7 +15,7 @@ HTML_CLIENT = """
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Infinite Synced Space Sandbox 3D</title>
+    <title>tuff no man sky clone</title>
     <style>
         body { 
             margin: 0; 
@@ -45,7 +45,6 @@ HTML_CLIENT = """
 </head>
 <body>
     <div id="ui">
-        <h3 style="margin-top: 0; color: #00ffff; text-shadow: 0 0 8px #00ffff;">3D Infinite Warp Flight Deck</h3>
         <p>Position: X <span id="pos-x" class="stat">0</span> | Z <span id="pos-z" class="stat">0</span> | Alt <span id="pos-y" class="stat">0</span></p>
         <p>Speed: <span id="speed" class="stat">0</span> m/s</p>
         <p>Pilots Online: <span id="player-count" class="stat">0</span></p>
