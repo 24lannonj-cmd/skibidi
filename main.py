@@ -58,9 +58,10 @@ HTML_CLIENT = """
         // 2. THREE.JS SCENE SETUP & LIGHTING
         // ==============================================================================
         const scene = new THREE.Scene();
-        scene.fog = new THREE.FogExp2(0x020208, 0.0002);
+        scene.fog = new THREE.FogExp2(0x020208, 0.0001);
 
-        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 40000);
+        // Extended far clipping distance to render colossal scale planets
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100000);
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setPixelRatio(window.devicePixelRatio);
@@ -70,7 +71,7 @@ HTML_CLIENT = """
         scene.add(ambientLight);
 
         const sunLight = new THREE.DirectionalLight(0xffffff, 2.0);
-        sunLight.position.set(500, 1000, 500);
+        sunLight.position.set(5000, 10000, 5000);
         scene.add(sunLight);
 
         const GLOBAL_SEED = 987654321;
@@ -86,21 +87,18 @@ HTML_CLIENT = """
         function generatePlanetTexture(seed) {
             const simplex = new SimplexNoise(seed.toString());
             
-            // Canvas 1: Color Map
             const canvas = document.createElement('canvas');
             canvas.width = 512;
             canvas.height = 256;
             const ctx = canvas.getContext('2d');
             const imgData = ctx.createImageData(canvas.width, canvas.height);
 
-            // Canvas 2: Bump/Height Map
             const bumpCanvas = document.createElement('canvas');
             bumpCanvas.width = 512;
             bumpCanvas.height = 256;
             const bumpCtx = bumpCanvas.getContext('2d');
             const bumpData = bumpCtx.createImageData(bumpCanvas.width, bumpCanvas.height);
 
-            // Derive distinct colors using seeded random
             const oceanR = Math.floor(seededRandom(seed) * 50);
             const oceanG = Math.floor(seededRandom(seed + 1) * 120 + 50);
             const oceanB = Math.floor(seededRandom(seed + 2) * 180 + 75);
@@ -109,24 +107,22 @@ HTML_CLIENT = """
             const landG = Math.floor(seededRandom(seed + 4) * 180 + 40);
             const landB = Math.floor(seededRandom(seed + 5) * 80 + 20);
 
-            const seaLevel = 0.48; // Threshold separating land and ocean
+            const seaLevel = 0.48;
 
             for (let y = 0; y < canvas.height; y++) {
                 const v = y / canvas.height;
-                const lat = (v - 0.5) * Math.PI; // -PI/2 to PI/2
+                const lat = (v - 0.5) * Math.PI;
                 const sinLat = Math.sin(lat);
                 const cosLat = Math.cos(lat);
 
                 for (let x = 0; x < canvas.width; x++) {
                     const u = x / canvas.width;
-                    const lon = u * Math.PI * 2; // 0 to 2*PI
+                    const lon = u * Math.PI * 2;
 
-                    // Seamless 3D coordinates on a sphere
                     const nx = cosLat * Math.cos(lon) * 1.5;
                     const ny = sinLat * 1.5;
                     const nz = cosLat * Math.sin(lon) * 1.5;
 
-                    // Sample multi-frequency noise for detailed terrain
                     let noiseVal = (simplex.noise3D(nx, ny, nz) + 1) * 0.5;
                     let detail = (simplex.noise3D(nx * 3, ny * 3, nz * 3)) * 0.15;
                     let totalHeight = Math.max(0, Math.min(1, noiseVal + detail));
@@ -134,22 +130,18 @@ HTML_CLIENT = """
                     const i = (y * canvas.width + x) * 4;
 
                     if (totalHeight < seaLevel) {
-                        // Ocean pixels: deep, smooth color
                         const oceanDepth = totalHeight / seaLevel;
                         imgData.data[i]     = oceanR * oceanDepth;
                         imgData.data[i + 1] = oceanG * oceanDepth;
                         imgData.data[i + 2] = oceanB * oceanDepth;
                         
-                        // Flat height map for water
                         bumpData.data[i] = bumpData.data[i+1] = bumpData.data[i+2] = 0;
                     } else {
-                        // Land pixels: distinctive continent color with elevation shading
                         const landElev = (totalHeight - seaLevel) / (1 - seaLevel);
                         imgData.data[i]     = Math.min(255, landR + landElev * 60);
                         imgData.data[i + 1] = Math.min(255, landG + landElev * 60);
                         imgData.data[i + 2] = Math.min(255, landB + landElev * 40);
 
-                        // High relief for land heightmap
                         const heightByte = Math.floor(landElev * 255);
                         bumpData.data[i] = bumpData.data[i+1] = bumpData.data[i+2] = heightByte;
                     }
@@ -168,12 +160,13 @@ HTML_CLIENT = """
         }
 
         // ==============================================================================
-        // INFINITE PROCEDURAL PLANETS MANAGER
+        // INFINITE MASSIVE PLANETS MANAGER
         // ==============================================================================
-        const PLANET_CHUNK_SIZE = 8000;
+        // Chunk spacing expanded to 35,000 for realistic interstellar gaps
+        const PLANET_CHUNK_SIZE = 35000;
         const PLANET_DRAW_RADIUS = 2;
         const planetChunks = {};
-        const planetGeo = new THREE.SphereGeometry(1, 48, 48);
+        const planetGeo = new THREE.SphereGeometry(1, 64, 64);
 
         function createPlanetChunk(cx, cy, cz) {
             const key = `${cx},${cy},${cz}`;
@@ -182,7 +175,8 @@ HTML_CLIENT = """
             let seed = (cx * 73856093) ^ (cy * 19349663) ^ (cz * 83492791) ^ GLOBAL_SEED;
 
             seed++;
-            if (seededRandom(seed) > 0.40) {
+            // Sparse distribution threshold (fewer planets)
+            if (seededRandom(seed) > 0.30) {
                 planetChunks[key] = null;
                 return;
             }
@@ -195,16 +189,16 @@ HTML_CLIENT = """
             const pz = (cz + seededRandom(seed)) * PLANET_CHUNK_SIZE;
 
             seed++;
-            const radius = 300 + seededRandom(seed) * 500;
+            // Massive scale planets (3,000 to 8,000 radius)
+            const radius = 3000 + seededRandom(seed) * 5000;
             
-            // Generate seamless color map and height/bump map
             const maps = generatePlanetTexture(seed);
 
             const mat = new THREE.MeshStandardMaterial({ 
                 map: maps.colorMap,
                 bumpMap: maps.bumpMap,
-                bumpScale: 12.0,
-                roughness: 0.6,
+                bumpScale: radius * 0.02, // Height scaling relative to huge size
+                roughness: 0.65,
                 metalness: 0.1
             });
 
@@ -264,11 +258,11 @@ HTML_CLIENT = """
         }
 
         // ==============================================================================
-        // WARP SPEED STRETCHING & GLOWING STAR FIELD (LINE SEGMENTS)
+        // OPTIMIZED WARP STARFIELD (LINES WHEN MOVING, SQUARE POINTS WHEN STILL)
         // ==============================================================================
-        const STAR_CHUNK_SIZE = 2500;
-        const STAR_DRAW_RADIUS = 2;
-        const STARS_PER_CHUNK = 200;
+        const STAR_CHUNK_SIZE = 4000;
+        const STAR_DRAW_RADIUS = 1; // Reduced draw radius for lag-free performance
+        const STARS_PER_CHUNK = 60;  // Reduced count per chunk
         const starChunks = {};
 
         function createStarChunk(cx, cy, cz) {
@@ -288,14 +282,14 @@ HTML_CLIENT = """
                 const rz = seededRandom(seed) * STAR_CHUNK_SIZE + cz * STAR_CHUNK_SIZE;
                 
                 basePoints.push({ x: rx, y: ry, z: rz });
-                linePositions.push(rx, ry, rz, rx, ry, rz); // Pair of points: Head and Tail
+                linePositions.push(rx, ry, rz, rx, ry, rz);
             }
 
             const starGeo = new THREE.BufferGeometry();
             starGeo.setAttribute('position', new THREE.Float32BufferAttribute(linePositions, 3));
             
             const starMat = new THREE.LineBasicMaterial({ 
-                color: 0x88eeff, 
+                color: 0xaaddee, 
                 transparent: true, 
                 opacity: 0.85 
             });
@@ -313,7 +307,10 @@ HTML_CLIENT = """
 
             const activeKeys = new Set();
             const speed = Math.sqrt(vx * vx + vy * vy + vz * vz);
-            const stretchFactor = Math.min(speed * 3.5, 80);
+            
+            // If speed is negligible, collapse tail back to head so stars render as sharp point squares
+            const isMoving = speed > 0.1;
+            const stretchFactor = isMoving ? Math.min(speed * 3.5, 90) : 0;
 
             for (let x = -STAR_DRAW_RADIUS; x <= STAR_DRAW_RADIUS; x++) {
                 for (let y = -STAR_DRAW_RADIUS; y <= STAR_DRAW_RADIUS; y++) {
@@ -334,15 +331,22 @@ HTML_CLIENT = """
                                 const pt = chunk.points[i];
                                 const idx = i * 6;
                                 
-                                // Head point (fixed position)
-                                pos[idx] = pt.x;
+                                // Point A (Head)
+                                pos[idx]     = pt.x;
                                 pos[idx + 1] = pt.y;
                                 pos[idx + 2] = pt.z;
 
-                                // Tail point (stretched opposite to velocity)
-                                pos[idx + 3] = pt.x - vx * stretchFactor * 0.1;
-                                pos[idx + 4] = pt.y - vz * stretchFactor * 0.1;
-                                pos[idx + 5] = pt.z - vy * stretchFactor * 0.1;
+                                // Point B (Tail - stretches opposite velocity vector)
+                                if (isMoving) {
+                                    pos[idx + 3] = pt.x - vx * stretchFactor * 0.1;
+                                    pos[idx + 4] = pt.y - vz * stretchFactor * 0.1;
+                                    pos[idx + 5] = pt.z - vy * stretchFactor * 0.1;
+                                } else {
+                                    // When stationary, head & tail share exact position (rendering as a square point)
+                                    pos[idx + 3] = pt.x;
+                                    pos[idx + 4] = pt.y;
+                                    pos[idx + 5] = pt.z;
+                                }
                             }
                             chunk.mesh.geometry.attributes.position.needsUpdate = true;
                         }
