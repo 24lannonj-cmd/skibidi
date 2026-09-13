@@ -502,10 +502,20 @@ HTML_CLIENT = """
                 
                 if (keys['ArrowUp'] || keys['w'] || keys['W']) {
                     if (currentSpeed < maxSpeed) {
-                        me.vx += Math.sin(me.angle) * 0.7;
-                        me.vy -= Math.cos(me.angle) * 0.7;
+                        if currentSpeed <= 5 {
+                            me.vx += Math.sin(me.angle) * 0.1;
+                            me.vy -= Math.cos(me.angle) * 0.1;
+                        if currentSpeed <= 10 and currentSpeed > 5 {
+                            me.vx += Math.sin(me.angle) * 0.3;
+                            me.vy -= Math.cos(me.angle) * 0.3;
+                        else {
+                            me.vx += Math.sin(me.angle) * 0.5;
+                            me.vy -= Math.cos(me.angle) * 0.5;
+                    }
+                    }
                     }
                     spawnTrailParticle(me.x, me.y, me.z, me.angle);
+                }
                 }
 
                 if (keys['ArrowDown'] || keys['s'] || keys['S']) {
