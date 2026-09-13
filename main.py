@@ -254,14 +254,31 @@ HTML_CLIENT = """
         }
 
         // ==============================================================================
-        // SINGLE INSTANCE BUFFER STAR POOL (NO-LAG RECYCLING SYSTEM)
+        // PROCEDURAL RADIAL GLOW TEXTURE & STAR POOL
         // ==============================================================================
-        const TOTAL_STARS = 500;
-        const STAR_FIELD_RADIUS = 4000;
-        const starPositions = new Float32Array(TOTAL_STARS * 6); // Head (x,y,z) + Tail (x,y,z)
-        const starOrigins = []; // Store base positions for velocity calculation
+        function createStarGlowTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 64;
+            canvas.height = 64;
+            const ctx = canvas.getContext('2d');
 
-        // Initialize star origins in a sphere around start point
+            const gradient = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+            gradient.addColorStop(0.0, 'rgba(255, 255, 255, 1.0)'); 
+            gradient.addColorStop(0.2, 'rgba(120, 220, 255, 0.9)'); 
+            gradient.addColorStop(0.5, 'rgba(30, 90, 220, 0.3)');  
+            gradient.addColorStop(1.0, 'rgba(0, 0, 0, 0)');        
+
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, 64, 64);
+
+            return new THREE.CanvasTexture(canvas);
+        }
+
+        const TOTAL_STARS = 600;
+        const STAR_FIELD_RADIUS = 4000;
+        const starPositions = new Float32Array(TOTAL_STARS * 6);
+        const starOrigins = [];
+
         for (let i = 0; i < TOTAL_STARS; i++) {
             const rx = (Math.random() - 0.5) * STAR_FIELD_RADIUS * 2;
             const ry = (Math.random() - 0.5) * STAR_FIELD_RADIUS * 2;
@@ -281,13 +298,16 @@ HTML_CLIENT = """
         const starGeo = new THREE.BufferGeometry();
         starGeo.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
 
-        const starMat = new THREE.LineBasicMaterial({
-            color: 0x99ddff,
+        const starGlowTexture = createStarGlowTexture();
+        const starMat = new THREE.PointsMaterial({
+            size: 65,
+            map: starGlowTexture,
             transparent: true,
-            opacity: 0.85
+            blending: THREE.AdditiveBlending,
+            depthWrite: false
         });
 
-        const starPoolMesh = new THREE.LineSegments(starGeo, starMat);
+        const starPoolMesh = new THREE.Points(starGeo, starMat);
         starPoolMesh.frustumCulled = false;
         scene.add(starPoolMesh);
 
@@ -305,13 +325,11 @@ HTML_CLIENT = """
             for (let i = 0; i < TOTAL_STARS; i++) {
                 const pt = starOrigins[i];
                 
-                // Calculate distance from player
                 const dx = pt.x - px;
                 const dy = pt.y - py;
                 const dz = pt.z - pz;
                 const distSq = dx * dx + dy * dy + dz * dz;
 
-                // Recycle stars that drift too far from player
                 if (distSq > STAR_FIELD_RADIUS * STAR_FIELD_RADIUS) {
                     const spawnDist = STAR_FIELD_RADIUS * 0.85;
                     const spread = 2500;
@@ -323,12 +341,10 @@ HTML_CLIENT = """
 
                 const idx = i * 6;
 
-                // Head position
                 posArray[idx]     = pt.x;
                 posArray[idx + 1] = pt.y;
                 posArray[idx + 2] = pt.z;
 
-                // Tail position
                 if (isMoving) {
                     posArray[idx + 3] = pt.x - vx * stretchFactor * 0.1;
                     posArray[idx + 4] = pt.y - vz * stretchFactor * 0.1;
@@ -502,16 +518,23 @@ HTML_CLIENT = """
                 
                 if (keys['ArrowUp'] || keys['w'] || keys['W']) {
                     if (currentSpeed < maxSpeed) {
-                        if (currentSpeed <= 5) {
-                            me.vx += Math.sin(me.angle) * 0.1;
-                            me.vy -= Math.cos(me.angle) * 0.1;
-                        } else if (currentSpeed <= 10 && currentSpeed > 5) {
-                            me.vx += Math.sin(me.angle) * 0.3;
-                            me.vy -= Math.cos(me.angle) * 0.3;
-                        } else {
-                            me.vx += Math.sin(me.angle) * 0.5;
-                            me.vy -= Math.cos(me.angle) * 0.5;
+                        let accelStep = 0.5;
+                        if (currentSpeed <= 3) {
+                            accelStep = 0.05;
+                        } else if (currentSpeed <= 7) {
+                            accelStep = 0.12;
+                        } else if (currentSpeed <= 12) {
+                            accelStep = 0.20;
+                        } else if (currentSpeed <= 18) {
+                            accelStep = 0.28;
+                        } else if (currentSpeed <= 24) {
+                            accelStep = 0.36;
+                        } else if (currentSpeed <= 30) {
+                            accelStep = 0.44;
                         }
+
+                        me.vx += Math.sin(me.angle) * accelStep;
+                        me.vy -= Math.cos(me.angle) * accelStep;
                     }
                     spawnTrailParticle(me.x, me.y, me.z, me.angle);
                 }
