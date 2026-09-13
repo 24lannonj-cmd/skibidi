@@ -60,7 +60,6 @@ HTML_CLIENT = """
         const scene = new THREE.Scene();
         scene.fog = new THREE.FogExp2(0x020208, 0.00005);
 
-        // Render distance expanded for colossal planets
         const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 250000);
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
@@ -187,7 +186,6 @@ HTML_CLIENT = """
             const pz = (cz + seededRandom(seed)) * PLANET_CHUNK_SIZE;
 
             seed++;
-            // Increased radius (8,000 to 20,000)
             const radius = 8000 + seededRandom(seed) * 12000;
             
             const maps = generatePlanetTexture(seed);
@@ -195,7 +193,7 @@ HTML_CLIENT = """
             const mat = new THREE.MeshStandardMaterial({ 
                 map: maps.colorMap,
                 bumpMap: maps.bumpMap,
-                bumpScale: radius * 0.04, // Larger bump intensity for mountain relief
+                bumpScale: radius * 0.04,
                 roughness: 0.65,
                 metalness: 0.1
             });
@@ -256,110 +254,93 @@ HTML_CLIENT = """
         }
 
         // ==============================================================================
-        // LAG-FREE WARP STARFIELD (SPAWN AS POINTS, STRETCH AFTER)
+        // SINGLE INSTANCE BUFFER STAR POOL (NO-LAG RECYCLING SYSTEM)
         // ==============================================================================
-        const STAR_CHUNK_SIZE = 5000;
-        const STAR_DRAW_RADIUS = 1;
-        const STARS_PER_CHUNK = 40; // Extremely lightweight to prevent lag
-        const starChunks = {};
+        const TOTAL_STARS = 500;
+        const STAR_FIELD_RADIUS = 4000;
+        const starPositions = new Float32Array(TOTAL_STARS * 6); // Head (x,y,z) + Tail (x,y,z)
+        const starOrigins = []; // Store base positions for velocity calculation
 
-        function createStarChunk(cx, cy, cz) {
-            const key = `${cx},${cy},${cz}`;
-            if (starChunks[key]) return;
-
-            const linePositions = [];
-            let seed = (cx * 73856093) ^ (cy * 19349663) ^ (cz * 83492791) ^ GLOBAL_SEED;
-
-            const basePoints = [];
-            for (let i = 0; i < STARS_PER_CHUNK; i++) {
-                seed++;
-                const rx = seededRandom(seed) * STAR_CHUNK_SIZE + cx * STAR_CHUNK_SIZE;
-                seed++;
-                const ry = seededRandom(seed) * STAR_CHUNK_SIZE + cy * STAR_CHUNK_SIZE;
-                seed++;
-                const rz = seededRandom(seed) * STAR_CHUNK_SIZE + cz * STAR_CHUNK_SIZE;
-                
-                basePoints.push({ x: rx, y: ry, z: rz });
-                // Initialized with 0 stretch so stars spawn cleanly as un-stretched points
-                linePositions.push(rx, ry, rz, rx, ry, rz);
-            }
-
-            const starGeo = new THREE.BufferGeometry();
-            starGeo.setAttribute('position', new THREE.Float32BufferAttribute(linePositions, 3));
+        // Initialize star origins in a sphere around start point
+        for (let i = 0; i < TOTAL_STARS; i++) {
+            const rx = (Math.random() - 0.5) * STAR_FIELD_RADIUS * 2;
+            const ry = (Math.random() - 0.5) * STAR_FIELD_RADIUS * 2;
+            const rz = (Math.random() - 0.5) * STAR_FIELD_RADIUS * 2;
             
-            const starMat = new THREE.LineBasicMaterial({ 
-                color: 0x99ddff, 
-                transparent: true, 
-                opacity: 0.8
-            });
+            starOrigins.push({ x: rx, y: ry, z: rz });
 
-            const lineSegments = new THREE.LineSegments(starGeo, starMat);
-            
-            scene.add(lineSegments);
-            starChunks[key] = { mesh: lineSegments, points: basePoints, currentStretch: 0 };
+            const idx = i * 6;
+            starPositions[idx]     = rx;
+            starPositions[idx + 1] = ry;
+            starPositions[idx + 2] = rz;
+            starPositions[idx + 3] = rx;
+            starPositions[idx + 4] = ry;
+            starPositions[idx + 5] = rz;
         }
 
-        function updateStarChunks(playerX, playerY, playerZ, vx, vy, vz) {
-            const currentChunkX = Math.floor(playerX / STAR_CHUNK_SIZE);
-            const currentChunkY = Math.floor(playerY / STAR_CHUNK_SIZE);
-            const currentChunkZ = Math.floor(playerZ / STAR_CHUNK_SIZE);
+        const starGeo = new THREE.BufferGeometry();
+        starGeo.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
 
-            const activeKeys = new Set();
+        const starMat = new THREE.LineBasicMaterial({
+            color: 0x99ddff,
+            transparent: true,
+            opacity: 0.85
+        });
+
+        const starPoolMesh = new THREE.LineSegments(starGeo, starMat);
+        starPoolMesh.frustumCulled = false;
+        scene.add(starPoolMesh);
+
+        function updateStarPool(px, py, pz, vx, vy, vz, angle) {
             const speed = Math.sqrt(vx * vx + vy * vy + vz * vz);
-            
-            const targetStretch = speed > 0.1 ? Math.min(speed * 3.0, 80) : 0;
+            const isMoving = speed > 0.1;
+            const stretchFactor = isMoving ? Math.min(speed * 3.0, 80) : 0;
 
-            for (let x = -STAR_DRAW_RADIUS; x <= STAR_DRAW_RADIUS; x++) {
-                for (let y = -STAR_DRAW_RADIUS; y <= STAR_DRAW_RADIUS; y++) {
-                    for (let z = -STAR_DRAW_RADIUS; z <= STAR_DRAW_RADIUS; z++) {
-                        const cx = currentChunkX + x;
-                        const cy = currentChunkY + y;
-                        const cz = currentChunkZ + z;
-                        const key = `${cx},${cy},${cz}`;
-                        
-                        activeKeys.add(key);
-                        createStarChunk(cx, cy, cz);
+            const dirX = Math.sin(angle);
+            const dirZ = -Math.cos(angle);
 
-                        if (starChunks[key]) {
-                            const chunk = starChunks[key];
-                            // Interpolate stretch smoothly so newly spawned stars stretch after spawn
-                            chunk.currentStretch += (targetStretch - chunk.currentStretch) * 0.15;
-                            
-                            const pos = chunk.mesh.geometry.attributes.position.array;
-                            
-                            for (let i = 0; i < chunk.points.length; i++) {
-                                const pt = chunk.points[i];
-                                const idx = i * 6;
-                                
-                                pos[idx]     = pt.x;
-                                pos[idx + 1] = pt.y;
-                                pos[idx + 2] = pt.z;
+            const posAttr = starGeo.attributes.position;
+            const posArray = posAttr.array;
 
-                                if (chunk.currentStretch > 0.05) {
-                                    pos[idx + 3] = pt.x - vx * chunk.currentStretch * 0.1;
-                                    pos[idx + 4] = pt.y - vz * chunk.currentStretch * 0.1;
-                                    pos[idx + 5] = pt.z - vy * chunk.currentStretch * 0.1;
-                                } else {
-                                    // Stationary square point rendering
-                                    pos[idx + 3] = pt.x;
-                                    pos[idx + 4] = pt.y;
-                                    pos[idx + 5] = pt.z;
-                                }
-                            }
-                            chunk.mesh.geometry.attributes.position.needsUpdate = true;
-                        }
-                    }
+            for (let i = 0; i < TOTAL_STARS; i++) {
+                const pt = starOrigins[i];
+                
+                // Calculate distance from player
+                const dx = pt.x - px;
+                const dy = pt.y - py;
+                const dz = pt.z - pz;
+                const distSq = dx * dx + dy * dy + dz * dz;
+
+                // Recycle stars that drift too far from player
+                if (distSq > STAR_FIELD_RADIUS * STAR_FIELD_RADIUS) {
+                    const spawnDist = STAR_FIELD_RADIUS * 0.85;
+                    const spread = 2500;
+                    
+                    pt.x = px + dirX * spawnDist + (Math.random() - 0.5) * spread;
+                    pt.y = py + (Math.random() - 0.5) * spread;
+                    pt.z = pz + dirZ * spawnDist + (Math.random() - 0.5) * spread;
+                }
+
+                const idx = i * 6;
+
+                // Head position
+                posArray[idx]     = pt.x;
+                posArray[idx + 1] = pt.y;
+                posArray[idx + 2] = pt.z;
+
+                // Tail position
+                if (isMoving) {
+                    posArray[idx + 3] = pt.x - vx * stretchFactor * 0.1;
+                    posArray[idx + 4] = pt.y - vz * stretchFactor * 0.1;
+                    posArray[idx + 5] = pt.z - vy * stretchFactor * 0.1;
+                } else {
+                    posArray[idx + 3] = pt.x;
+                    posArray[idx + 4] = pt.y;
+                    posArray[idx + 5] = pt.z;
                 }
             }
 
-            for (let key in starChunks) {
-                if (!activeKeys.has(key)) {
-                    scene.remove(starChunks[key].mesh);
-                    starChunks[key].mesh.geometry.dispose();
-                    starChunks[key].mesh.material.dispose();
-                    delete starChunks[key];
-                }
-            }
+            posAttr.needsUpdate = true;
         }
 
         // ==============================================================================
@@ -521,8 +502,8 @@ HTML_CLIENT = """
                 
                 if (keys['ArrowUp'] || keys['w'] || keys['W']) {
                     if (currentSpeed < maxSpeed) {
-                        me.vx += Math.sin(me.angle) * 0.45;
-                        me.vy -= Math.cos(me.angle) * 0.45;
+                        me.vx += Math.sin(me.angle) * 0.7;
+                        me.vy -= Math.cos(me.angle) * 0.7;
                     }
                     spawnTrailParticle(me.x, me.y, me.z, me.angle);
                 }
@@ -643,7 +624,7 @@ HTML_CLIENT = """
             if (me && shipMeshes[localPlayerId]) {
                 updateCameraPosition(me);
 
-                updateStarChunks(me.x, me.z || 0, me.y, me.vx, me.vy, me.vz || 0);
+                updateStarPool(me.x, me.z || 0, me.y, me.vx, me.vy, me.vz || 0, me.angle);
                 updatePlanetChunks(me.x, me.z || 0, me.y);
 
                 const posArr = originLine.geometry.attributes.position.array;
