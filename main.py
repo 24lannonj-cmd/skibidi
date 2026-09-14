@@ -82,7 +82,6 @@ HTML_CLIENT = """
 
         // ==============================================================================
         // SEAMLESS 3D SPHERICAL PLANET TEXTURE & BUMP MAP GENERATOR
-        // (FIX 1: Reduced resolution from 512x256 to 256x128 to decrease GPU/CPU load)
         // ==============================================================================
         function generatePlanetTexture(seed) {
             const simplex = new SimplexNoise(seed.toString());
@@ -107,7 +106,7 @@ HTML_CLIENT = """
             const landG = Math.floor(seededRandom(seed + 4) * 180 + 40);
             const landB = Math.floor(seededRandom(seed + 5) * 80 + 20);
 
-            const seaLevel = 0.48;
+            const seaLevel = 0.45;
 
             for (let y = 0; y < canvas.height; y++) {
                 const v = y / canvas.height;
@@ -161,7 +160,6 @@ HTML_CLIENT = """
 
         // ==============================================================================
         // COLOSSAL PLANETS MANAGER
-        // (FIX 2: Reduced draw radius from 2 to 1 to render 27 active chunks instead of 125)
         // ==============================================================================
         const PLANET_CHUNK_SIZE = 60000;
         const PLANET_DRAW_RADIUS = 1;
@@ -276,7 +274,7 @@ HTML_CLIENT = """
             return new THREE.CanvasTexture(canvas);
         }
 
-        const TOTAL_STARS =600;
+        const TOTAL_STARS = 1000;
         const STAR_FIELD_RADIUS = 6000;
         const starPositions = new Float32Array(TOTAL_STARS * 6);
         const starOrigins = [];
