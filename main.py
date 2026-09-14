@@ -505,49 +505,46 @@ HTML_CLIENT = """
         // ==============================================================================
         // MOVEMENT & PHYSICS
         // ==============================================================================
-        function updateLocalPhysics() {
-            if (localPlayerId && gameState.players[localPlayerId]) {
-                const me = gameState.players[localPlayerId];
+        function updateLocalPhysics()
+        const maxSpeed = 35;
         
-                if (me.z === undefined || isNaN(me.z)) me.z = 0;
-                if (me.vz === undefined || isNaN(me.vz)) me.vz = 0;
+        if (keys['ArrowUp'] || keys['w'] || keys['W']) {
+            const baseAccel = 0.35;
+            const dragFactor = 0.013; // 1 - 0.987
+            const effectiveThrust = baseAccel + (currentSpeed * dragFactor);
         
-                if (keys['ArrowLeft'] || keys['a'] || keys['A']) me.angle -= 0.03;
-                if (keys['ArrowRight'] || keys['d'] || keys['D']) me.angle += 0.03;
-                
-                const currentSpeed = Math.sqrt(me.vx * me.vx + me.vy * me.vy + me.vz * me.vz);
-                const maxSpeed = 50;
-                
-                if (keys['ArrowUp'] || keys['w'] || keys['W']) {
-                    if (currentSpeed < maxSpeed) {
-                        const baseAccel = 0.35;
-                        const dragFactor = 0.013; // 1 - 0.987 (matches your x/y friction)
-                        
-                        // Dynamically add extra thrust to perfectly cancel out current frame drag
-                        const effectiveThrust = baseAccel + (currentSpeed * dragFactor);
-                
-                        me.vx += Math.sin(me.angle) * effectiveThrust;
-                        me.vy -= Math.cos(me.angle) * effectiveThrust;
-                    }
-                    spawnTrailParticle(me.x, me.y, me.z, me.angle);
-                }
-
-                if (keys['ArrowDown'] || keys['s'] || keys['S']) {
-                    me.vx *= 0.90;
-                    me.vy *= 0.90;
-                    me.vz *= 0.90;
-                }
-
-                if (keys['x'] || keys['X']) me.vz += 0.45;
-                if (keys['z'] || keys['Z']) me.vz -= 0.45;
+            me.vx += Math.sin(me.angle) * effectiveThrust;
+            me.vy -= Math.cos(me.angle) * effectiveThrust;
+            
+            spawnTrailParticle(me.x, me.y, me.z, me.angle);
+        }
         
-                me.x += me.vx;
-                me.y += me.vy;
-                me.z += me.vz;
+        if (keys['ArrowDown'] || keys['s'] || keys['S']) {
+            me.vx *= 0.90;
+            me.vy *= 0.90;
+            me.vz *= 0.90;
+        }
         
-                me.vx *= 0.987;
-                me.vy *= 0.987;
-                me.vz *= 0.950;
+        if (keys['x'] || keys['X']) me.vz += 0.45;
+        if (keys['z'] || keys['Z']) me.vz -= 0.45;
+        
+        // Apply drag
+        me.vx *= 0.987;
+        me.vy *= 0.987;
+        me.vz *= 0.950;
+        
+        // Clamp velocity so current speed NEVER exceeds maxSpeed
+        const newSpeed = Math.sqrt(me.vx * me.vx + me.vy * me.vy + me.vz * me.vz);
+        if (newSpeed > maxSpeed) {
+            const scale = maxSpeed / newSpeed;
+            me.vx *= scale;
+            me.vy *= scale;
+            me.vz *= scale;
+        }
+        
+        me.x += me.vx;
+        me.y += me.vy;
+        me.z += me.vz;
         
                 const shipRadius = 12;
                 for (let key in planetChunks) {
