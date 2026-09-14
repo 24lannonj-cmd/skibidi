@@ -256,11 +256,63 @@ HTML_CLIENT = """
         // ==============================================================================
         // PROCEDURAL RADIAL GLOW TEXTURE & STAR POOL
         // ==============================================================================
-        function updateStarPool(px, py, pz, vx, vy, vz, angle) {
-            const speed = Math.sqrt(vx * vx + vy * vy + vz * vz);
-            const isMoving = speed > 0.1;
-            const stretchFactor = isMoving ? Math.min(speed * 3.0, 80) : 0;
+        // ==============================================================================
+        // PROCEDURAL RADIAL GLOW TEXTURE & STAR POOL
+        // ==============================================================================
+        function createStarGlowTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 64;
+            canvas.height = 64;
+            const ctx = canvas.getContext('2d');
 
+            const gradient = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+            gradient.addColorStop(0.0, 'rgba(255, 255, 255, 1.0)'); 
+            gradient.addColorStop(0.2, 'rgba(250, 250, 250, 0.9)'); 
+            gradient.addColorStop(0.5, 'rgba(245, 245, 245, 0.3)');  
+            gradient.addColorStop(1.0, 'rgba(0, 0, 0, 0)');        
+
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, 64, 64);
+
+            return new THREE.CanvasTexture(canvas);
+        }
+
+        const TOTAL_STARS = 1000;
+        const STAR_FIELD_RADIUS = 6000;
+        // 3 floats per point (x, y, z)
+        const starPositions = new Float32Array(TOTAL_STARS * 3);
+        const starOrigins = [];
+
+        for (let i = 0; i < TOTAL_STARS; i++) {
+            const rx = (Math.random() - 0.5) * STAR_FIELD_RADIUS * 2;
+            const ry = (Math.random() - 0.5) * STAR_FIELD_RADIUS * 2;
+            const rz = (Math.random() - 0.5) * STAR_FIELD_RADIUS * 2;
+            
+            starOrigins.push({ x: rx, y: ry, z: rz });
+
+            const idx = i * 3;
+            starPositions[idx]     = rx;
+            starPositions[idx + 1] = ry;
+            starPositions[idx + 2] = rz;
+        }
+
+        const starGeo = new THREE.BufferGeometry();
+        starGeo.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
+
+        const starGlowTexture = createStarGlowTexture();
+        const starMat = new THREE.PointsMaterial({
+            size: 65,
+            map: starGlowTexture,
+            transparent: true,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false
+        });
+
+        const starPoolMesh = new THREE.Points(starGeo, starMat);
+        starPoolMesh.frustumCulled = false;
+        scene.add(starPoolMesh);
+
+        function updateStarPool(px, py, pz, vx, vy, vz, angle) {
             const posAttr = starGeo.attributes.position;
             const posArray = posAttr.array;
 
@@ -272,36 +324,23 @@ HTML_CLIENT = """
                 let dz = pt.z - pz;
                 let distSq = dx * dx + dy * dy + dz * dz;
 
-                // When a star moves beyond STAR_FIELD_RADIUS, respawn it symmetrically around the player
+                // When a star moves out of bounds, wrap it symmetrically around the player in 3D
                 if (distSq > STAR_FIELD_RADIUS * STAR_FIELD_RADIUS) {
                     const u = Math.random();
                     const v = Math.random();
-                    const theta = u * 2.0 * Math.PI; // Full 360-degree horizontal angle
-                    const phi = Math.acos(2.0 * v - 1.0); // Uniform vertical distribution
-                    const radius = STAR_FIELD_RADIUS * 0.95; // Respawn near the outer shell boundary
+                    const theta = u * 2.0 * Math.PI; 
+                    const phi = Math.acos(2.0 * v - 1.0); 
+                    const radius = STAR_FIELD_RADIUS * 0.95; 
 
                     pt.x = px + radius * Math.sin(phi) * Math.cos(theta);
                     pt.y = py + radius * Math.sin(phi) * Math.sin(theta);
                     pt.z = pz + radius * Math.cos(phi);
                 }
 
-                const idx = i * 6;
-
-                // Set star head position
+                const idx = i * 3;
                 posArray[idx]     = pt.x;
                 posArray[idx + 1] = pt.y;
                 posArray[idx + 2] = pt.z;
-
-                // Set star tail position (stretch based on velocity vector)
-                if (isMoving) {
-                    posArray[idx + 3] = pt.x - vx * stretchFactor * 0.1;
-                    posArray[idx + 4] = pt.y - vz * stretchFactor * 0.1;
-                    posArray[idx + 5] = pt.z - vy * stretchFactor * 0.1;
-                } else {
-                    posArray[idx + 3] = pt.x;
-                    posArray[idx + 4] = pt.y;
-                    posArray[idx + 5] = pt.z;
-                }
             }
 
             posAttr.needsUpdate = true;
