@@ -505,87 +505,88 @@ HTML_CLIENT = """
         // ==============================================================================
         // MOVEMENT & PHYSICS
         // ==============================================================================
-        function updateLocalPhysics()
-        const maxSpeed = 35;
-        
-        if (keys['ArrowUp'] || keys['w'] || keys['W']) {
-            const baseAccel = 0.35;
-            const dragFactor = 0.013; // 1 - 0.987
-            const effectiveThrust = baseAccel + (currentSpeed * dragFactor);
-        
-            me.vx += Math.sin(me.angle) * effectiveThrust;
-            me.vy -= Math.cos(me.angle) * effectiveThrust;
+        function updateLocalPhysics() {
+            const maxSpeed = 35;
             
-            spawnTrailParticle(me.x, me.y, me.z, me.angle);
-        }
-        
-        if (keys['ArrowDown'] || keys['s'] || keys['S']) {
-            me.vx *= 0.90;
-            me.vy *= 0.90;
-            me.vz *= 0.90;
-        }
-        
-        if (keys['x'] || keys['X']) me.vz += 0.45;
-        if (keys['z'] || keys['Z']) me.vz -= 0.45;
-        
-        // Apply drag
-        me.vx *= 0.987;
-        me.vy *= 0.987;
-        me.vz *= 0.950;
-        
-        // Clamp velocity so current speed NEVER exceeds maxSpeed
-        const newSpeed = Math.sqrt(me.vx * me.vx + me.vy * me.vy + me.vz * me.vz);
-        if (newSpeed > maxSpeed) {
-            const scale = maxSpeed / newSpeed;
-            me.vx *= scale;
-            me.vy *= scale;
-            me.vz *= scale;
-        }
-        
-        me.x += me.vx;
-        me.y += me.vy;
-        me.z += me.vz;
-        
-                const shipRadius = 12;
-                for (let key in planetChunks) {
-                    const planet = planetChunks[key];
-                    if (!planet) continue;
+            // Calculate current speed before thrust logic
+            const currentSpeed = Math.sqrt(me.vx * me.vx + me.vy * me.vy + me.vz * me.vz);
+            
+            if (keys['ArrowUp'] || keys['w'] || keys['W']) {
+                const baseAccel = 0.35;
+                const dragFactor = 0.013; // 1 - 0.987
+                const effectiveThrust = baseAccel + (currentSpeed * dragFactor);
+                
+                me.vx += Math.sin(me.angle) * effectiveThrust;
+                me.vy -= Math.cos(me.angle) * effectiveThrust;
+                
+                spawnTrailParticle(me.x, me.y, me.z, me.angle);
+            }
+            
+            if (keys['ArrowDown'] || keys['s'] || keys['S']) {
+                me.vx *= 0.90;
+                me.vy *= 0.90;
+                me.vz *= 0.90;
+            }
+            
+            if (keys['x'] || keys['X']) me.vz += 0.45;
+            if (keys['z'] || keys['Z']) me.vz -= 0.45;
+            
+            // Apply drag
+            me.vx *= 0.987;
+            me.vy *= 0.987;
+            me.vz *= 0.950;
+            
+            // Clamp velocity so current speed NEVER exceeds maxSpeed
+            const newSpeed = Math.sqrt(me.vx * me.vx + me.vy * me.vy + me.vz * me.vz);
+            if (newSpeed > maxSpeed) {
+                const scale = maxSpeed / newSpeed;
+                me.vx *= scale;
+                me.vy *= scale;
+                me.vz *= scale;
+            }
+            
+            me.x += me.vx;
+            me.y += me.vy;
+            me.z += me.vz;
+            
+            const shipRadius = 12;
+            for (let key in planetChunks) {
+                const planet = planetChunks[key];
+                if (!planet) continue;
+                
+                const dx = me.x - planet.x;
+                const dy = me.z - planet.z; 
+                const dz = me.y - planet.y;
+                const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+                const minDist = planet.radius + shipRadius;
+                
+                if (dist < minDist && dist > 0) {
+                    const nx = dx / dist;
+                    const ny = dy / dist;
+                    const nz = dz / dist;
                     
-                    const dx = me.x - planet.x;
-                    const dy = me.z - planet.z; 
-                    const dz = me.y - planet.y;
-                    const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-                    const minDist = planet.radius + shipRadius;
-        
-                    if (dist < minDist && dist > 0) {
-                        const nx = dx / dist;
-                        const ny = dy / dist;
-                        const nz = dz / dist;
-        
-                        const overlap = minDist - dist;
-                        me.x += nx * overlap;
-                        me.z += ny * overlap;
-                        me.y += nz * overlap;
-        
-                        const dotProduct = me.vx * nx + me.vz * ny + me.vy * nz;
-        
-                        if (dotProduct < 0) {
-                            me.vx = (me.vx - 2 * dotProduct * nx) * 0.6;
-                            me.vz = (me.vz - 2 * dotProduct * ny) * 0.6;
-                            me.vy = (me.vy - 2 * dotProduct * nz) * 0.6;
-                            me.angle = Math.atan2(me.vx, -me.vy);
-                        }
+                    const overlap = minDist - dist;
+                    me.x += nx * overlap;
+                    me.z += ny * overlap;
+                    me.y += nz * overlap;
+                    
+                    const dotProduct = me.vx * nx + me.vz * ny + me.vy * nz;
+                    
+                    if (dotProduct < 0) {
+                        me.vx = (me.vx - 2 * dotProduct * nx) * 0.6;
+                        me.vz = (me.vz - 2 * dotProduct * ny) * 0.6;
+                        me.vy = (me.vy - 2 * dotProduct * nz) * 0.6;
+                        me.angle = Math.atan2(me.vx, -me.vy);
                     }
                 }
-        
-                if (ws.readyState === WebSocket.OPEN) {
-                    ws.send(JSON.stringify({ 
-                        type: 'sync', x: me.x, y: me.y, z: me.z, angle: me.angle, vx: me.vx, vy: me.vy, vz: me.vz 
-                    }));
-                }
+            }
+            
+            if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ 
+                    type: 'sync', x: me.x, y: me.y, z: me.z, angle: me.angle, vx: me.vx, vy: me.vy, vz: me.vz 
+                }));
             }
         }
-
         // ==============================================================================
         // CHASE CAMERA CONTROLS
         // ==============================================================================
