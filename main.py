@@ -516,27 +516,14 @@ HTML_CLIENT = """
                 if (keys['ArrowRight'] || keys['d'] || keys['D']) me.angle += 0.03;
                 
                 const currentSpeed = Math.sqrt(me.vx * me.vx + me.vy * me.vy + me.vz * me.vz);
-                const maxSpeed = 35;
+                const maxSpeed = 50;
                 
                 if (keys['ArrowUp'] || keys['w'] || keys['W']) {
                     if (currentSpeed < maxSpeed) {
-                        let accelStep = 0.5;
-                        if (currentSpeed <= 3) {
-                            accelStep = 0.05;
-                        } else if (currentSpeed <= 7) {
-                            accelStep = 0.12;
-                        } else if (currentSpeed <= 12) {
-                            accelStep = 0.20;
-                        } else if (currentSpeed <= 18) {
-                            accelStep = 0.28;
-                        } else if (currentSpeed <= 24) {
-                            accelStep = 0.36;
-                        } else if (currentSpeed <= 30) {
-                            accelStep = 0.44;
-                        }
 
-                        me.vx += Math.sin(me.angle) * accelStep;
-                        me.vy -= Math.cos(me.angle) * accelStep;
+
+                        me.vx += Math.sin(me.angle) * 0.35;
+                        me.vy -= Math.cos(me.angle) * 0.35;
                     }
                     spawnTrailParticle(me.x, me.y, me.z, me.angle);
                 }
