@@ -520,10 +520,14 @@ HTML_CLIENT = """
                 
                 if (keys['ArrowUp'] || keys['w'] || keys['W']) {
                     if (currentSpeed < maxSpeed) {
-
-
-                        me.vx += Math.sin(me.angle) * 0.35;
-                        me.vy -= Math.cos(me.angle) * 0.35;
+                        const baseAccel = 0.35;
+                        const dragFactor = 0.013; // 1 - 0.987 (matches your x/y friction)
+                        
+                        // Dynamically add extra thrust to perfectly cancel out current frame drag
+                        const effectiveThrust = baseAccel + (currentSpeed * dragFactor);
+                
+                        me.vx += Math.sin(me.angle) * effectiveThrust;
+                        me.vy -= Math.cos(me.angle) * effectiveThrust;
                     }
                     spawnTrailParticle(me.x, me.y, me.z, me.angle);
                 }
