@@ -266,8 +266,8 @@ HTML_CLIENT = """
 
             const gradient = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
             gradient.addColorStop(0.0, 'rgba(255, 255, 255, 1.0)'); 
-            gradient.addColorStop(0.2, 'rgba(120, 220, 255, 0.9)'); 
-            gradient.addColorStop(0.5, 'rgba(30, 90, 220, 0.3)');  
+            gradient.addColorStop(0.2, 'rgba(250, 250, 250, 0.9)'); 
+            gradient.addColorStop(0.5, 'rgba(245, 245, 245, 0.3)');  
             gradient.addColorStop(1.0, 'rgba(0, 0, 0, 0)');        
 
             ctx.fillStyle = gradient;
@@ -276,8 +276,8 @@ HTML_CLIENT = """
             return new THREE.CanvasTexture(canvas);
         }
 
-        const TOTAL_STARS = 600;
-        const STAR_FIELD_RADIUS = 4000;
+        const TOTAL_STARS =600;
+        const STAR_FIELD_RADIUS = 6000;
         const starPositions = new Float32Array(TOTAL_STARS * 6);
         const starOrigins = [];
 
