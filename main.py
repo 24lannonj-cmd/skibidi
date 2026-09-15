@@ -106,7 +106,7 @@ HTML_CLIENT = """
             const landG = Math.floor(seededRandom(seed + 4) * 180 + 40);
             const landB = Math.floor(seededRandom(seed + 5) * 80 + 20);
 
-            const seaLevel = 0.45;
+            const seaLevel = 0.48;
 
             for (let y = 0; y < canvas.height; y++) {
                 const v = y / canvas.height;
@@ -123,7 +123,7 @@ HTML_CLIENT = """
                     const nz = cosLat * Math.sin(lon) * 1.5;
 
                     let noiseVal = (simplex.noise3D(nx, ny, nz) + 1) * 0.5;
-                    let detail = (simplex.noise3D(nx * 3, ny * 3, nz * 3)) * 0.30;
+                    let detail = (simplex.noise3D(nx * 3, ny * 3, nz * 3)) * 0.15;
                     let totalHeight = Math.max(0, Math.min(1, noiseVal + detail));
 
                     const i = (y * canvas.width + x) * 4;
@@ -159,12 +159,11 @@ HTML_CLIENT = """
         }
 
         // ==============================================================================
-        // COLOSSAL PLANETS MANAGER
+        // COLOSSAL PLANETS MANAGER WITH PHYSICAL 3D TERRAIN DISPLACEMENT
         // ==============================================================================
         const PLANET_CHUNK_SIZE = 60000;
         const PLANET_DRAW_RADIUS = 1;
         const planetChunks = {};
-        const planetGeo = new THREE.SphereGeometry(1, 64, 64);
 
         function createPlanetChunk(cx, cy, cz) {
             const key = `${cx},${cy},${cz}`;
@@ -190,17 +189,42 @@ HTML_CLIENT = """
             
             const maps = generatePlanetTexture(seed);
 
+            // Generate physically deformed 3D geometry
+            const geom = new THREE.SphereGeometry(radius, 64, 64);
+            const posAttr = geom.attributes.position;
+            const vertex = new THREE.Vector3();
+            const simplex = new SimplexNoise(seed.toString());
+
+            const seaLevel = 0.48;
+            const maxMountainHeight = radius * 0.08; 
+
+            for (let i = 0; i < posAttr.count; i++) {
+                vertex.fromBufferAttribute(posAttr, i);
+                const dir = vertex.clone().normalize();
+
+                let noiseVal = (simplex.noise3D(dir.x * 1.5, dir.y * 1.5, dir.z * 1.5) + 1) * 0.5;
+                let detail = (simplex.noise3D(dir.x * 4.5, dir.y * 4.5, dir.z * 4.5)) * 0.15;
+                let totalHeight = Math.max(0, Math.min(1, noiseVal + detail));
+
+                if (totalHeight > seaLevel) {
+                    const landElev = (totalHeight - seaLevel) / (1 - seaLevel);
+                    const displacement = landElev * maxMountainHeight;
+                    vertex.addScaledVector(dir, displacement);
+                }
+
+                posAttr.setXYZ(i, vertex.x, vertex.y, vertex.z);
+            }
+
+            geom.computeVertexNormals();
+
             const mat = new THREE.MeshStandardMaterial({ 
                 map: maps.colorMap,
-                bumpMap: maps.bumpMap,
-                bumpScale: radius * 0.30,
-                roughness: 0.65,
+                roughness: 0.7,
                 metalness: 0.1
             });
 
-            const mesh = new THREE.Mesh(planetGeo, mat);
+            const mesh = new THREE.Mesh(geom, mat);
             mesh.position.set(px, pz, py);
-            mesh.scale.set(radius, radius, radius);
 
             scene.add(mesh);
 
@@ -209,7 +233,9 @@ HTML_CLIENT = """
                 x: px,
                 y: py,
                 z: pz,
-                radius: radius
+                radius: radius,
+                seed: seed,
+                maxMountainHeight: maxMountainHeight
             };
         }
 
@@ -239,7 +265,7 @@ HTML_CLIENT = """
                     if (planetChunks[key] && planetChunks[key].mesh) {
                         scene.remove(planetChunks[key].mesh);
                         if (planetChunks[key].mesh.material.map) planetChunks[key].mesh.material.map.dispose();
-                        if (planetChunks[key].mesh.material.bumpMap) planetChunks[key].mesh.material.bumpMap.dispose();
+                        planetChunks[key].mesh.geometry.dispose();
                         planetChunks[key].mesh.material.dispose();
                     }
                     delete planetChunks[key];
@@ -254,10 +280,7 @@ HTML_CLIENT = """
         }
 
         // ==============================================================================
-        // PROCEDURAL RADIAL GLOW TEXTURE & STAR POOL
-        // ==============================================================================
-        // ==============================================================================
-        // PROCEDURAL RADIAL GLOW TEXTURE & STAR POOL
+        // UNIFORM 360-DEGREE SPHERICAL STAR POOL
         // ==============================================================================
         function createStarGlowTexture() {
             const canvas = document.createElement('canvas');
@@ -279,7 +302,6 @@ HTML_CLIENT = """
 
         const TOTAL_STARS = 1000;
         const STAR_FIELD_RADIUS = 6000;
-        // 3 floats per point (x, y, z)
         const starPositions = new Float32Array(TOTAL_STARS * 3);
         const starOrigins = [];
 
@@ -324,7 +346,6 @@ HTML_CLIENT = """
                 let dz = pt.z - pz;
                 let distSq = dx * dx + dy * dy + dz * dz;
 
-                // When a star moves out of bounds, wrap it symmetrically around the player in 3D
                 if (distSq > STAR_FIELD_RADIUS * STAR_FIELD_RADIUS) {
                     const u = Math.random();
                     const v = Math.random();
@@ -345,6 +366,7 @@ HTML_CLIENT = """
 
             posAttr.needsUpdate = true;
         }
+
         // ==============================================================================
         // DYNAMIC ORIGIN LINE & EXHAUST PARTICLES
         // ==============================================================================
@@ -489,9 +511,6 @@ HTML_CLIENT = """
         // ==============================================================================
         // MOVEMENT & PHYSICS
         // ==============================================================================
-        // ==============================================================================
-        // MOVEMENT & PHYSICS
-        // ==============================================================================
         function updateLocalPhysics() {
             if (localPlayerId && gameState.players[localPlayerId]) {
                 const me = gameState.players[localPlayerId];
@@ -507,7 +526,7 @@ HTML_CLIENT = """
 
                 if (keys['ArrowUp'] || keys['w'] || keys['W']) {
                     const baseAccel = 0.35;
-                    const dragFactor = 0.013; // Matches drag (1 - 0.987)
+                    const dragFactor = 0.013;
                     const effectiveThrust = baseAccel + (currentSpeed * dragFactor);
 
                     me.vx += Math.sin(me.angle) * effectiveThrust;
@@ -530,7 +549,7 @@ HTML_CLIENT = """
                 me.vy *= 0.987;
                 me.vz *= 0.950;
 
-                // Clamp velocity to lock top speed smoothly at maxSpeed
+                // Clamp velocity to prevent UI flickering at top speed
                 const newSpeed = Math.sqrt(me.vx * me.vx + me.vy * me.vy + me.vz * me.vz);
                 if (newSpeed > maxSpeed) {
                     const scale = maxSpeed / newSpeed;
@@ -543,6 +562,7 @@ HTML_CLIENT = """
                 me.y += me.vy;
                 me.z += me.vz;
 
+                // Physical 3D Terrain Collision Check
                 const shipRadius = 12;
                 for (let key in planetChunks) {
                     const planet = planetChunks[key];
@@ -552,13 +572,29 @@ HTML_CLIENT = """
                     const dy = me.z - planet.z; 
                     const dz = me.y - planet.y;
                     const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-                    const minDist = planet.radius + shipRadius;
+
+                    const maxPossibleRadius = planet.radius + planet.maxMountainHeight + shipRadius;
+                    if (dist > maxPossibleRadius) continue;
+
+                    const nx = dx / dist;
+                    const ny = dz / dist; 
+                    const nz = dy / dist;
+
+                    const simplex = new SimplexNoise(planet.seed.toString());
+                    let noiseVal = (simplex.noise3D(nx * 1.5, ny * 1.5, nz * 1.5) + 1) * 0.5;
+                    let detail = (simplex.noise3D(nx * 4.5, ny * 4.5, nz * 4.5)) * 0.15;
+                    let totalHeight = Math.max(0, Math.min(1, noiseVal + detail));
+
+                    const seaLevel = 0.48;
+                    let surfaceRadius = planet.radius;
+                    if (totalHeight > seaLevel) {
+                        const landElev = (totalHeight - seaLevel) / (1 - seaLevel);
+                        surfaceRadius += landElev * planet.maxMountainHeight;
+                    }
+
+                    const minDist = surfaceRadius + shipRadius;
 
                     if (dist < minDist && dist > 0) {
-                        const nx = dx / dist;
-                        const ny = dy / dist;
-                        const nz = dz / dist;
-
                         const overlap = minDist - dist;
                         me.x += nx * overlap;
                         me.z += ny * overlap;
@@ -582,6 +618,7 @@ HTML_CLIENT = """
                 }
             }
         }
+
         // ==============================================================================
         // CHASE CAMERA CONTROLS
         // ==============================================================================
