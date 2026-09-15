@@ -8,6 +8,9 @@ from fastapi.responses import HTMLResponse
 
 app = FastAPI()
 
+# ==============================================================================
+# 1. FRONTEND HTML & CSS LAYOUT
+# ==============================================================================
 HTML_CLIENT = """
 <!DOCTYPE html>
 <html>
@@ -60,7 +63,10 @@ HTML_CLIENT = """
             display: none;
         }
     </style>
+    <!-- Three.js Library -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- Simplex Noise Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/simplex-noise/2.4.0/simplex-noise.min.js"></script>
 </head>
 <body>
     <div id="ui">
@@ -100,101 +106,111 @@ HTML_CLIENT = """
             return x - Math.floor(x);
         }
 
-        // ==============================================================================
-        // FAST GPU-BASED PLANET SHADER (Replaces CPU Canvas Generation)
-        // ==============================================================================
-        const planetVertexShader = `
-            varying vec3 vNormal;
-            varying vec3 vPosition;
-            void main() {
-                vNormal = normalize(normalMatrix * normal);
-                vPosition = position;
-                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-            }
-        `;
+        function lerp(start, end, amt) {
+            return (1 - amt) * start + amt * end;
+        }
 
-        const planetFragmentShader = `
-            uniform float uSeed;
-            varying vec3 vNormal;
-            varying vec3 vPosition;
+        function getPlanetNoise(simplex, nx, ny, nz) {
+            let n1 = (simplex.noise3D(nx * 2.5, ny * 2.5, nz * 2.5) + 1) * 0.5 * 0.65;
+            let n2 = (simplex.noise3D(nx * 6.0, ny * 6.0, nz * 6.0) + 1) * 0.5 * 0.25;
+            let n3 = (simplex.noise3D(nx * 14.0, ny * 14.0, nz * 14.0) + 1) * 0.5 * 0.10;
+            return n1 + n2 + n3;
+        }
 
-            // Fast 3D GPU Noise
-            vec4 permute(vec4 x){ return mod(((x*34.0)+1.0)*x, 289.0); }
-            vec4 taylorInvSqrt(vec4 r){ return 1.79284291400159 - 0.85373472095314 * r; }
-            float snoise(vec3 v){
-                const vec2 C = vec2(1.0/6.0, 1.0/3.0);
-                const vec4 D = vec4(0.0, 0.5, 1.0, 2.0);
-                vec3 i  = floor(v + dot(v, C.yyy));
-                vec3 x0 = v - i + dot(i, C.xxx);
-                vec3 g = step(x0.yzx, x0.xyz);
-                vec3 l = 1.0 - g;
-                vec3 i1 = min(g.xyz, l.zxy);
-                vec3 i2 = max(g.xyz, l.zxy);
-                vec3 x1 = x0 - i1 + C.xxx;
-                vec3 x2 = x0 - i2 + C.yyy;
-                vec3 x3 = x0 - D.yyy;
-                i = mod(i, 289.0);
-                vec4 p = permute(permute(permute(
-                            i.z + vec4(0.0, i1.z, i2.z, 1.0))
-                        + i.y + vec4(0.0, i1.y, i2.y, 1.0))
-                        + i.x + vec4(0.0, i1.x, i2.x, 1.0));
-                float n_ = 0.142857142857;
-                vec3 ns = n_ * D.wyz - D.xzx;
-                vec4 j = p - 49.0 * floor(p * n_);
-                vec4 x_ = floor(j * ns.z);
-                vec4 y_ = floor(j - 7.0 * x_);
-                vec4 x = x_ *ns.x + ns.yyyy;
-                vec4 y = y_ *ns.x + ns.yyyy;
-                vec4 h = 1.0 - abs(x) - abs(y);
-                vec4 b0 = vec4(x.xy, y.xy);
-                vec4 b1 = vec4(x.zw, y.zw);
-                vec4 s0 = floor(b0)*2.0 + 1.0;
-                vec4 s1 = floor(b1)*2.0 + 1.0;
-                vec4 sh = -step(h, vec4(0.0));
-                vec4 a0 = b0.xzyw + s0.xzyw*sh.xxyy;
-                vec4 a1 = b1.xzyw + s1.xzyw*sh.zzww;
-                vec3 p0 = vec3(a0.xy, h.x);
-                vec3 p1 = vec3(a0.zw, h.y);
-                vec3 p2 = vec3(a1.xy, h.z);
-                vec3 p3 = vec3(a1.zw, h.w);
-                vec4 norm = taylorInvSqrt(vec4(dot(p0,p0), dot(p1,p1), dot(p2, p2), dot(p3,p3)));
-                p0 *= norm.x; p1 *= norm.y; p2 *= norm.z; p3 *= norm.w;
-                vec4 m = max(0.6 - vec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0);
-                m = m * m;
-                return 42.0 * dot(m*m, vec4(dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3)));
+        // Texture Cache to prevent CPU spikes
+        const planetTextureCache = {};
+
+        function generatePlanetTextures(seed) {
+            if (planetTextureCache[seed]) {
+                return planetTextureCache[seed];
             }
 
-            void main() {
-                vec3 normPos = normalize(vPosition);
-                float n = snoise(normPos * 2.5 + vec3(uSeed));
-                
-                vec3 landColor = vec3(0.1, 0.5, 0.2);
-                vec3 waterColor = vec3(0.02, 0.1, 0.4);
-                
-                vec3 baseColor = (n > 0.05) ? landColor : waterColor;
-                
-                // Simple Lighting
-                vec3 lightDir = normalize(vec3(1.0, 2.0, 1.0));
-                float diff = max(dot(vNormal, lightDir), 0.15);
-                
-                gl_FragColor = vec4(baseColor * diff, 1.0);
-            }
-        `;
+            const simplex = new SimplexNoise(seed.toString());
+            
+            const width = 256;
+            const height = 128;
 
-        function createPlanetMaterial(seed) {
-            return new THREE.ShaderMaterial({
-                vertexShader: planetVertexShader,
-                fragmentShader: planetFragmentShader,
-                uniforms: { uSeed: { value: seed } }
-            });
+            const canvasColor = document.createElement('canvas');
+            canvasColor.width = width;
+            canvasColor.height = height;
+            const ctxColor = canvasColor.getContext('2d');
+            const imgDataColor = ctxColor.createImageData(width, height);
+
+            const temp = seededRandom(seed * 3.14159);
+
+            let oceanR, oceanG, oceanB;
+            let landR, landG, landB;
+
+            if (temp < 0.25) {
+                // Ice World
+                const t = temp / 0.25;
+                oceanR = lerp(10, 30, t); oceanG = lerp(60, 100, t); oceanB = lerp(120, 180, t);
+                landR = lerp(200, 230, t); landG = lerp(220, 240, t); landB = lerp(245, 255, t);
+            } else if (temp < 0.50) {
+                // Terran World
+                const t = (temp - 0.25) / 0.25;
+                oceanR = lerp(5, 20, t); oceanG = lerp(35, 70, t); oceanB = lerp(120, 160, t);
+                landR = lerp(30, 80, t); landG = lerp(110, 160, t); landB = lerp(30, 50, t);
+            } else if (temp < 0.75) {
+                // Desert World
+                const t = (temp - 0.50) / 0.25;
+                oceanR = lerp(80, 140, t); oceanG = lerp(140, 110, t); oceanB = lerp(20, 10, t);
+                landR = lerp(210, 230, t); landG = lerp(170, 140, t); landB = lerp(80, 50, t);
+            } else {
+                // Lava World
+                const t = (temp - 0.75) / 0.25;
+                oceanR = lerp(255, 200, t); oceanG = lerp(60, 15, t); oceanB = 0;
+                landR = lerp(60, 30, t); landG = lerp(40, 20, t); landB = lerp(35, 18, t);
+            }
+
+            const seaLevel = 0.48;
+
+            for (let y = 0; y < height; y++) {
+                const v = y / height;
+                const lat = (v - 0.5) * Math.PI;
+                const sinLat = Math.sin(lat);
+                const cosLat = Math.cos(lat);
+
+                for (let x = 0; x < width; x++) {
+                    const u = x / width;
+                    const lon = u * Math.PI * 2;
+
+                    const nx = cosLat * Math.cos(lon);
+                    const ny = sinLat;
+                    const nz = cosLat * Math.sin(lon);
+
+                    let totalHeight = getPlanetNoise(simplex, nx, ny, nz);
+                    const i = (y * width + x) * 4;
+
+                    if (totalHeight < seaLevel) {
+                        imgDataColor.data[i]     = Math.floor(oceanR);
+                        imgDataColor.data[i + 1] = Math.floor(oceanG);
+                        imgDataColor.data[i + 2] = Math.floor(oceanB);
+                    } else {
+                        imgDataColor.data[i]     = Math.floor(landR);
+                        imgDataColor.data[i + 1] = Math.floor(landG);
+                        imgDataColor.data[i + 2] = Math.floor(landB);
+                    }
+                    imgDataColor.data[i + 3] = 255;
+                }
+            }
+
+            ctxColor.putImageData(imgDataColor, 0, 0);
+
+            const colorTex = new THREE.CanvasTexture(canvasColor);
+            colorTex.needsUpdate = true;
+
+            const res = { colorTex, isLava: temp >= 0.75 };
+            planetTextureCache[seed] = res;
+            return res;
         }
 
         // ==============================================================================
         // PLANETS MANAGER
         // ==============================================================================
-        const PLANET_CHUNK_SIZE = 75000;
-        const PLANET_DRAW_RADIUS = 1; 
-        const UNLOAD_DISTANCE_THRESHOLD = 150000;
+        const PLANET_CHUNK_SIZE = 60000;
+        const PLANET_DRAW_RADIUS = 2;
+        const UNLOAD_DISTANCE_THRESHOLD = 180000;
         const planetChunks = {};
 
         const sharedSphereGeom = new THREE.SphereGeometry(1, 32, 32);
@@ -205,7 +221,7 @@ HTML_CLIENT = """
 
             let seed = (cx * 73856093) ^ (cy * 19349663) ^ (cz * 83492791) ^ GLOBAL_SEED;
 
-            if (seededRandom(seed) > 0.20) {
+            if (seededRandom(seed) > 0.25) {
                 planetChunks[key] = null;
                 return;
             }
@@ -219,8 +235,18 @@ HTML_CLIENT = """
 
             seed += 400;
             const radius = 8000 + seededRandom(seed) * 12000;
+            
+            const textures = generatePlanetTextures(seed);
 
-            const mat = createPlanetMaterial(seed);
+            const mat = new THREE.MeshStandardMaterial({ 
+                map: textures.colorTex,
+                roughness: textures.isLava ? 0.3 : 0.8,
+                metalness: textures.isLava ? 0.4 : 0.1,
+                emissiveMap: textures.isLava ? textures.colorTex : null,
+                emissive: textures.isLava ? 0xff2200 : 0x000000,
+                emissiveIntensity: textures.isLava ? 0.8 : 0.0
+            });
+
             const mesh = new THREE.Mesh(sharedSphereGeom, mat);
             mesh.scale.set(radius, radius, radius);
             mesh.position.set(px, pz, py);
@@ -232,7 +258,8 @@ HTML_CLIENT = """
                 x: px,
                 y: py,
                 z: pz,
-                radius: radius
+                radius: radius,
+                seed: seed
             };
         }
 
@@ -275,7 +302,7 @@ HTML_CLIENT = """
         }
 
         // ==============================================================================
-        // ORIGINAL NAV ARROW & SHIP VISUALS
+        // NEAREST PLANET POINTER LOGIC
         // ==============================================================================
         const arrowEl = document.getElementById('nav-arrow');
         const textEl = document.getElementById('nav-text');
@@ -319,12 +346,16 @@ HTML_CLIENT = """
             let screenY = -(screenPos.y * heightHalf) + heightHalf;
 
             const isBehind = screenPos.z > 1;
+
             const margin = 50;
+            let edgeX = screenX;
+            let edgeY = screenY;
 
             if (isBehind || screenX < margin || screenX > window.innerWidth - margin || screenY < margin || screenY > window.innerHeight - margin) {
-                let edgeX = isBehind ? window.innerWidth - screenX : screenX;
-                let edgeY = isBehind ? window.innerHeight - screenY : screenY;
-
+                if (isBehind) {
+                    edgeX = window.innerWidth - screenX;
+                    edgeY = window.innerHeight - screenY;
+                }
                 const dx = edgeX - widthHalf;
                 const dy = edgeY - heightHalf;
                 const angle = Math.atan2(dy, dx);
@@ -332,26 +363,58 @@ HTML_CLIENT = """
                 const maxX = widthHalf - margin;
                 const maxY = heightHalf - margin;
 
-                const scale = Math.min(maxX / Math.abs(Math.cos(angle)), maxY / Math.abs(Math.sin(angle)));
-                screenX = widthHalf + Math.cos(angle) * scale;
-                screenY = heightHalf + Math.sin(angle) * scale;
+                const cos = Math.cos(angle);
+                const sin = Math.sin(angle);
+
+                const scaleX = maxX / Math.abs(cos);
+                const scaleY = maxY / Math.abs(sin);
+                const scale = Math.min(scaleX, scaleY);
+
+                edgeX = widthHalf + cos * scale;
+                edgeY = heightHalf + sin * scale;
             }
 
+            const dx = screenX - edgeX;
+            const dy = screenY - edgeY;
+            let rotationAngle = Math.atan2(dy, dx) + Math.PI / 2;
+            if (isBehind) rotationAngle += Math.PI;
+
             arrowEl.style.display = 'block';
-            arrowEl.style.left = `${screenX - 12}px`;
-            arrowEl.style.top = `${screenY - 12}px`;
+            arrowEl.style.left = `${edgeX - 12}px`;
+            arrowEl.style.top = `${edgeY - 12}px`;
+            arrowEl.style.transform = `rotate(${rotationAngle}rad)`;
 
             textEl.style.display = 'block';
-            textEl.style.left = `${screenX - 25}px`;
-            textEl.style.top = `${screenY + 18}px`;
+            textEl.style.left = `${edgeX - 25}px`;
+            textEl.style.top = `${edgeY + 18}px`;
             textEl.innerText = `${formattedDist}m`;
         }
 
         // ==============================================================================
-        // ORIGINAL STARFIELD
+        // UNIFORM SPHERICAL STAR POOL
         // ==============================================================================
-        const TOTAL_STARS = 1200;
-        const STAR_FIELD_RADIUS = 5000;
+        function createStarGlowTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 64;
+            canvas.height = 64;
+            const ctx = canvas.getContext('2d');
+
+            const gradient = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+            gradient.addColorStop(0.0, 'rgba(255, 255, 255, 1.0)'); 
+            gradient.addColorStop(0.2, 'rgba(250, 250, 250, 0.9)'); 
+            gradient.addColorStop(0.5, 'rgba(245, 245, 245, 0.3)');  
+            gradient.addColorStop(1.0, 'rgba(0, 0, 0, 0)');        
+
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, 64, 64);
+
+            const tex = new THREE.CanvasTexture(canvas);
+            tex.needsUpdate = true;
+            return tex;
+        }
+
+        const TOTAL_STARS = 800;
+        const STAR_FIELD_RADIUS = 6000;
         const starPositions = new Float32Array(TOTAL_STARS * 3);
         const starOrigins = [];
 
@@ -361,8 +424,9 @@ HTML_CLIENT = """
             const rz = (Math.random() - 0.5) * STAR_FIELD_RADIUS * 2;
             
             starOrigins.push({ x: rx, y: ry, z: rz });
+
             const idx = i * 3;
-            starPositions[idx] = rx;
+            starPositions[idx]     = rx;
             starPositions[idx + 1] = ry;
             starPositions[idx + 2] = rz;
         }
@@ -370,54 +434,150 @@ HTML_CLIENT = """
         const starGeo = new THREE.BufferGeometry();
         starGeo.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
 
+        const starGlowTexture = createStarGlowTexture();
         const starMat = new THREE.PointsMaterial({
-            size: 3,
-            color: 0xffffff,
+            size: 50,
+            map: starGlowTexture,
             transparent: true,
-            opacity: 0.8
+            blending: THREE.AdditiveBlending,
+            depthWrite: false
         });
 
         const starPoolMesh = new THREE.Points(starGeo, starMat);
+        starPoolMesh.frustumCulled = false;
         scene.add(starPoolMesh);
 
         function updateStarPool(px, py, pz) {
-            const posArray = starGeo.attributes.position.array;
+            const posAttr = starGeo.attributes.position;
+            const posArray = posAttr.array;
+
             for (let i = 0; i < TOTAL_STARS; i++) {
                 const pt = starOrigins[i];
+                
                 let dx = pt.x - px;
                 let dy = pt.y - py;
                 let dz = pt.z - pz;
+                let distSq = dx * dx + dy * dy + dz * dz;
 
-                if (dx * dx + dy * dy + dz * dz > STAR_FIELD_RADIUS * STAR_FIELD_RADIUS) {
-                    pt.x = px + (Math.random() - 0.5) * STAR_FIELD_RADIUS * 1.8;
-                    pt.y = py + (Math.random() - 0.5) * STAR_FIELD_RADIUS * 1.8;
-                    pt.z = pz + (Math.random() - 0.5) * STAR_FIELD_RADIUS * 1.8;
+                if (distSq > STAR_FIELD_RADIUS * STAR_FIELD_RADIUS) {
+                    const u = Math.random();
+                    const v = Math.random();
+                    const theta = u * 2.0 * Math.PI; 
+                    const phi = Math.acos(2.0 * v - 1.0); 
+                    const radius = STAR_FIELD_RADIUS * 0.95; 
+
+                    pt.x = px + radius * Math.sin(phi) * Math.cos(theta);
+                    pt.y = py + radius * Math.sin(phi) * Math.sin(theta);
+                    pt.z = pz + radius * Math.cos(phi);
                 }
 
                 const idx = i * 3;
-                posArray[idx] = pt.x;
+                posArray[idx]     = pt.x;
                 posArray[idx + 1] = pt.y;
                 posArray[idx + 2] = pt.z;
             }
-            starGeo.attributes.position.needsUpdate = true;
+
+            posAttr.needsUpdate = true;
         }
 
         // ==============================================================================
-        // ORIGINAL DIAMOND SHIP MESH
+        // DYNAMIC ORIGIN LINE & EXHAUST PARTICLES
+        // ==============================================================================
+        const lineGeo = new THREE.BufferGeometry();
+        const linePositions = new Float32Array(6); 
+        lineGeo.setAttribute('position', new THREE.BufferAttribute(linePositions, 3));
+        const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff, opacity: 0.8, transparent: true });
+        const originLine = new THREE.Line(lineGeo, lineMat);
+        originLine.frustumCulled = false;
+        scene.add(originLine);
+
+        const trailParticles = [];
+        const particleGeo = new THREE.SphereGeometry(1.2, 6, 6);
+        const particleMat = new THREE.MeshBasicMaterial({ color: 0xff6600, transparent: true, opacity: 0.8 });
+
+        function spawnTrailParticle(x, y, z, angle) {
+            if (trailParticles.length > 25) return;
+            const particle = new THREE.Mesh(particleGeo, particleMat.clone());
+            particle.position.set(
+                x - Math.sin(angle) * 12 + (Math.random() - 0.5) * 2,
+                z + (Math.random() - 0.5) * 2,
+                y + Math.cos(angle) * 12 + (Math.random() - 0.5) * 2
+            );
+            scene.add(particle);
+            trailParticles.push({ mesh: particle, life: 1.0 });
+        }
+
+        function updateParticles() {
+            for (let i = trailParticles.length - 1; i >= 0; i--) {
+                const p = trailParticles[i];
+                p.life -= 0.05;
+                p.mesh.scale.multiplyScalar(0.95);
+                p.mesh.material.opacity = p.life;
+
+                if (p.life <= 0) {
+                    scene.remove(p.mesh);
+                    p.mesh.geometry.dispose();
+                    p.mesh.material.dispose();
+                    trailParticles.splice(i, 1);
+                }
+            }
+        }
+
+        // ==============================================================================
+        // 3D MODEL FACTORIES
         // ==============================================================================
         function createShipMesh(isLocal) {
             const group = new THREE.Group();
-            const hullGeo = new THREE.OctahedronGeometry(12, 0);
-            const hullMat = new THREE.MeshBasicMaterial({ 
-                color: isLocal ? 0x00ffff : 0xff3344, 
-                wireframe: false 
+
+            const hullGeo = new THREE.ConeGeometry(8, 24, 4);
+            hullGeo.rotateX(-Math.PI / 2);
+            const hullMat = new THREE.MeshStandardMaterial({ 
+                color: isLocal ? 0x00ff88 : 0xff3344, 
+                roughness: 0.3, 
+                metalness: 0.8 
             });
-            group.add(new THREE.Mesh(hullGeo, hullMat));
+            const hull = new THREE.Mesh(hullGeo, hullMat);
+            group.add(hull);
+
+            const engineGeo = new THREE.CylinderGeometry(2.5, 0, 14, 8);
+            engineGeo.rotateX(-Math.PI / 2);
+            const engineMat = new THREE.MeshStandardMaterial({ 
+                color: 0xff5500,
+                emissive: 0xff4400,
+                emissiveIntensity: 3.0
+            });
+            const engine = new THREE.Mesh(engineGeo, engineMat);
+            engine.position.z = 12;
+            group.add(engine);
+
             return group;
         }
 
+        function createStationMesh() {
+            const group = new THREE.Group();
+            const ringGeo = new THREE.TorusGeometry(80, 6, 16, 64);
+            const ringMat = new THREE.MeshStandardMaterial({ color: 0x00ffff, metalness: 0.9, roughness: 0.2 });
+            const ring = new THREE.Mesh(ringGeo, ringMat);
+            ring.rotation.x = Math.PI / 2;
+            group.add(ring);
+
+            const coreGeo = new THREE.SphereGeometry(25, 32, 32);
+            const coreMat = new THREE.MeshStandardMaterial({ color: 0x2244aa, metalness: 0.5 });
+            const core = new THREE.Mesh(coreGeo, coreMat);
+            group.add(core);
+
+            return group;
+        }
+
+        const stationMesh = createStationMesh();
+        scene.add(stationMesh);
+
+        // ==============================================================================
+        // CLIENT STATE & WEBSOCKET HANDLING
+        // ==============================================================================
         const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const ws = new WebSocket(`${wsProtocol}//${window.location.host}/ws`);
+        const wsUrl = `${wsProtocol}//${window.location.host}/ws`;
+        const ws = new WebSocket(wsUrl);
 
         let localPlayerId = null;
         let gameState = { players: {} };
@@ -426,72 +586,206 @@ HTML_CLIENT = """
 
         window.addEventListener('keydown', e => { keys[e.key] = true; });
         window.addEventListener('keyup', e => { keys[e.key] = false; });
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
 
         ws.onmessage = (event) => {
             const data = JSON.parse(event.data);
             if (data.type === 'init') {
                 localPlayerId = data.id;
-                gameState.players[localPlayerId] = { x: 200, y: 0, z: 0, angle: 0, vx: 0, vy: 0, vz: 0 };
-            } else if (data.type === 'state') {
+                if (!gameState.players[localPlayerId]) {
+                    gameState.players[localPlayerId] = { x: 200, y: 0, z: 0, angle: 0, vx: 0, vy: 0, vz: 0 };
+                }
+                return;
+            }
+            if (data.type === 'state') {
                 for (let id in data.gameState.players) {
-                    if (id !== localPlayerId) gameState.players[id] = data.gameState.players[id];
+                    if (id !== localPlayerId) {
+                        gameState.players[id] = data.gameState.players[id];
+                    } else if (!gameState.players[localPlayerId]) {
+                        gameState.players[localPlayerId] = data.gameState.players[id];
+                    }
+                }
+                for (let id in gameState.players) {
+                    if (!data.gameState.players[id] && id !== localPlayerId) {
+                        delete gameState.players[id];
+                        if (shipMeshes[id]) {
+                            scene.remove(shipMeshes[id]);
+                            delete shipMeshes[id];
+                        }
+                    }
                 }
                 document.getElementById('player-count').innerText = Object.keys(data.gameState.players).length;
             }
         };
 
+        // ==============================================================================
+        // MOVEMENT & PHYSICS
+        // ==============================================================================
         function updateLocalPhysics() {
-            if (!localPlayerId || !gameState.players[localPlayerId]) return;
-            const me = gameState.players[localPlayerId];
+            if (localPlayerId && gameState.players[localPlayerId]) {
+                const me = gameState.players[localPlayerId];
 
-            if (keys['a'] || keys['A']) me.angle -= 0.03;
-            if (keys['d'] || keys['D']) me.angle += 0.03;
+                if (me.z === undefined || isNaN(me.z)) me.z = 0;
+                if (me.vz === undefined || isNaN(me.vz)) me.vz = 0;
 
-            if (keys['w'] || keys['W']) {
-                me.vx += Math.sin(me.angle) * 0.4;
-                me.vy -= Math.cos(me.angle) * 0.4;
+                const maxSpeed = 35;
+                const currentSpeed = Math.sqrt(me.vx * me.vx + me.vy * me.vy + me.vz * me.vz);
+
+                if (keys['ArrowLeft'] || keys['a'] || keys['A']) me.angle -= 0.03;
+                if (keys['ArrowRight'] || keys['d'] || keys['D']) me.angle += 0.03;
+
+                if (keys['ArrowUp'] || keys['w'] || keys['W']) {
+                    const baseAccel = 0.35;
+                    const dragFactor = 0.013;
+                    const effectiveThrust = baseAccel + (currentSpeed * dragFactor);
+
+                    me.vx += Math.sin(me.angle) * effectiveThrust;
+                    me.vy -= Math.cos(me.angle) * effectiveThrust;
+
+                    spawnTrailParticle(me.x, me.y, me.z, me.angle);
+                }
+
+                if (keys['ArrowDown'] || keys['s'] || keys['S']) {
+                    me.vx *= 0.90;
+                    me.vy *= 0.90;
+                    me.vz *= 0.90;
+                }
+
+                if (keys['x'] || keys['X']) me.vz += 0.45;
+                if (keys['z'] || keys['Z']) me.vz -= 0.45;
+
+                me.vx *= 0.987;
+                me.vy *= 0.987;
+                me.vz *= 0.950;
+
+                const newSpeed = Math.sqrt(me.vx * me.vx + me.vy * me.vy + me.vz * me.vz);
+                if (newSpeed > maxSpeed) {
+                    const scale = maxSpeed / newSpeed;
+                    me.vx *= scale;
+                    me.vy *= scale;
+                    me.vz *= scale;
+                }
+
+                me.x += me.vx;
+                me.y += me.vy;
+                me.z += me.vz;
+
+                const shipRadius = 12;
+                for (let key in planetChunks) {
+                    const planet = planetChunks[key];
+                    if (!planet) continue;
+
+                    const dx = me.x - planet.x;
+                    const dy = me.z - planet.z; 
+                    const dz = me.y - planet.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+
+                    const minDist = planet.radius + shipRadius;
+
+                    if (dist < minDist && dist > 0) {
+                        const nx = dx / dist;
+                        const ny = dz / dist; 
+                        const nz = dy / dist;
+
+                        const overlap = minDist - dist;
+                        me.x += nx * overlap;
+                        me.z += ny * overlap;
+                        me.y += nz * overlap;
+
+                        const dotProduct = me.vx * nx + me.vz * ny + me.vy * nz;
+
+                        if (dotProduct < 0) {
+                            me.vx = (me.vx - 2 * dotProduct * nx) * 0.6;
+                            me.vz = (me.vz - 2 * dotProduct * ny) * 0.6;
+                            me.vy = (me.vy - 2 * dotProduct * nz) * 0.6;
+                            me.angle = Math.atan2(me.vx, -me.vy);
+                        }
+                    }
+                }
+
+                if (ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ 
+                        type: 'sync', x: me.x, y: me.y, z: me.z, angle: me.angle, vx: me.vx, vy: me.vy, vz: me.vz 
+                    }));
+                }
             }
+        }
 
-            if (keys['x'] || keys['X']) me.vz += 0.4;
-            if (keys['z'] || keys['Z']) me.vz -= 0.4;
+        function updateCameraPosition(me) {
+            const cameraDistance = 140; 
+            const cameraHeight = 50;    
 
-            me.vx *= 0.98; me.vy *= 0.98; me.vz *= 0.95;
-            me.x += me.vx; me.y += me.vy; me.z += me.vz;
+            const targetCamX = me.x - Math.sin(me.angle) * cameraDistance;
+            const targetCamZ = me.y + Math.cos(me.angle) * cameraDistance;
+            const targetCamY = me.z + cameraHeight;
 
-            const speed = Math.sqrt(me.vx * me.vx + me.vy * me.vy + me.vz * me.vz);
-            document.getElementById('speed').innerText = Math.round(speed * 10);
+            camera.position.x += (targetCamX - camera.position.x) * 0.1;
+            camera.position.z += (targetCamZ - camera.position.z) * 0.1;
+            camera.position.y += (targetCamY - camera.position.y) * 0.1;
 
-            if (ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ type: 'sync', x: me.x, y: me.y, z: me.z, angle: me.angle, vx: me.vx, vy: me.vy, vz: me.vz }));
-            }
+            const lookTarget = new THREE.Vector3(
+                me.x + Math.sin(me.angle) * 40,
+                me.z,
+                me.y - Math.cos(me.angle) * 40
+            );
+            camera.lookAt(lookTarget);
         }
 
         function animate() {
             requestAnimationFrame(animate);
             updateLocalPhysics();
+            updateParticles();
 
-            const me = gameState.players[localPlayerId];
-            if (me) {
-                camera.position.set(me.x - Math.sin(me.angle) * 140, me.z + 50, me.y + Math.cos(me.angle) * 140);
-                camera.lookAt(me.x, me.z, me.y);
-
-                updateStarPool(me.x, me.z, me.y);
-                updatePlanetChunks(me.x, me.z, me.y);
-                updatePlanetPointer(me.x, me.z, me.y);
-
-                document.getElementById('pos-x').innerText = Math.round(me.x);
-                document.getElementById('pos-z').innerText = Math.round(me.y);
-                document.getElementById('pos-y').innerText = Math.round(me.z);
-            }
+            stationMesh.rotation.y += 0.005;
 
             for (let id in gameState.players) {
+                const p = gameState.players[id];
+                if (!p) continue;
+
                 if (!shipMeshes[id]) {
                     shipMeshes[id] = createShipMesh(id === localPlayerId);
                     scene.add(shipMeshes[id]);
                 }
-                const p = gameState.players[id];
-                shipMeshes[id].position.set(p.x, p.z || 0, p.y);
-                shipMeshes[id].rotation.y = -p.angle;
+
+                if (id === localPlayerId) {
+                    shipMeshes[id].position.x = p.x;
+                    shipMeshes[id].position.y = p.z || 0;
+                    shipMeshes[id].position.z = p.y;
+                    shipMeshes[id].rotation.y = -p.angle;
+                } else {
+                    shipMeshes[id].position.x += (p.x - shipMeshes[id].position.x) * 0.25;
+                    shipMeshes[id].position.y += ((p.z || 0) - shipMeshes[id].position.y) * 0.25;
+                    shipMeshes[id].position.z += (p.y - shipMeshes[id].position.z) * 0.25;
+                    shipMeshes[id].rotation.y += (-p.angle - shipMeshes[id].rotation.y) * 0.25;
+                }
+            }
+
+            const me = gameState.players[localPlayerId];
+            if (me && shipMeshes[localPlayerId]) {
+                updateCameraPosition(me);
+
+                updateStarPool(me.x, me.z || 0, me.y);
+                updatePlanetChunks(me.x, me.z || 0, me.y);
+                updatePlanetPointer(me.x, me.z || 0, me.y);
+
+                const posArr = originLine.geometry.attributes.position.array;
+                posArr[0] = 0;     
+                posArr[1] = 0;     
+                posArr[2] = 0;     
+                posArr[3] = me.x;  
+                posArr[4] = me.z || 0; 
+                posArr[5] = me.y;  
+                originLine.geometry.attributes.position.needsUpdate = true;
+
+                const spd = Math.sqrt(me.vx * me.vx + me.vy * me.vy + (me.vz || 0) * (me.vz || 0)).toFixed(1);
+                document.getElementById('pos-x').innerText = Math.round(me.x);
+                document.getElementById('pos-z').innerText = Math.round(me.y);
+                document.getElementById('pos-y').innerText = Math.round(me.z || 0);
+                document.getElementById('speed').innerText = spd;
             }
 
             renderer.render(scene, camera);
@@ -503,7 +797,13 @@ HTML_CLIENT = """
 </html>
 """
 
-game_state = {"players": {}}
+# ==============================================================================
+# BACKEND GAME STATE & FASTAPI SERVER
+# ==============================================================================
+game_state = {
+    "station": {"x": 0, "y": 0, "radius": 80},
+    "players": {}
+}
 
 class ConnectionManager:
     def __init__(self):
@@ -512,12 +812,16 @@ class ConnectionManager:
     async def connect(self, websocket: WebSocket, player_id: str):
         await websocket.accept()
         self.active_connections[player_id] = websocket
-        game_state["players"][player_id] = {"x": 200, "y": 0, "z": 0, "angle": 0, "vx": 0, "vy": 0, "vz": 0}
+        game_state["players"][player_id] = {
+            "x": 200, "y": 0, "z": 0, "angle": 0, "vx": 0, "vy": 0, "vz": 0
+        }
         await websocket.send_text(json.dumps({"type": "init", "id": player_id}))
 
     def disconnect(self, player_id: str):
-        self.active_connections.pop(player_id, None)
-        game_state["players"].pop(player_id, None)
+        if player_id in self.active_connections:
+            del self.active_connections[player_id]
+        if player_id in game_state["players"]:
+            del game_state["players"][player_id]
 
     async def broadcast_state(self):
         payload = json.dumps({"type": "state", "gameState": game_state})
@@ -541,10 +845,17 @@ async def websocket_endpoint(websocket: WebSocket):
         while True:
             data = await websocket.receive_text()
             payload = json.loads(data)
+            
             if payload.get("type") == "sync":
-                p = game_state["players"].get(player_id)
-                if p:
-                    p.update({k: payload[k] for k in ["x", "y", "z", "angle", "vx", "vy", "vz"] if k in payload})
+                player = game_state["players"].get(player_id)
+                if player:
+                    player["x"] = payload.get("x", player["x"])
+                    player["y"] = payload.get("y", player["y"])
+                    player["z"] = payload.get("z", player["z"])
+                    player["angle"] = payload.get("angle", player["angle"])
+                    player["vx"] = payload.get("vx", player["vx"])
+                    player["vy"] = payload.get("vy", player["vy"])
+                    player["vz"] = payload.get("vz", player.get("vz", 0))
     except WebSocketDisconnect:
         manager.disconnect(player_id)
 
