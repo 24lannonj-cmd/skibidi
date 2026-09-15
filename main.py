@@ -118,7 +118,7 @@ HTML_CLIENT = """
         }
 
         // ==============================================================================
-        // DISTINCT BIOME COLOR & TEXTURE GENERATOR
+        // DYNAMIC TEMPERATURE & ASH GRADIENT GENERATOR
         // ==============================================================================
         function generatePlanetTextures(seed) {
             const simplex = new SimplexNoise(seed.toString());
@@ -141,45 +141,46 @@ HTML_CLIENT = """
             let landR, landG, landB;
 
             if (temp < 0.25) {
-                // Ice World: Deep Frozen Cyan Seas & Pure White/Blue Glaciers
+                // Ice World: Frozen Cyan Seas & Glaciers
                 const t = temp / 0.25;
                 oceanR = lerp(10, 30, t);
                 oceanG = lerp(60, 100, t);
                 oceanB = lerp(120, 180, t);
 
-                landR = lerp(210, 240, t);
-                landG = lerp(235, 250, t);
-                landB = lerp(255, 255, t);
+                landR = lerp(200, 230, t);
+                landG = lerp(220, 240, t);
+                landB = lerp(245, 255, t);
             } else if (temp < 0.50) {
-                // Terran / Earth World: Deep Blue Oceans & Rich Green/Brown Continents
+                // Terran World: Darker Ash-tinted Earth Colors
                 const t = (temp - 0.25) / 0.25;
                 oceanR = lerp(5, 20, t);
-                oceanG = lerp(35, 80, t);
-                oceanB = lerp(120, 180, t);
+                oceanG = lerp(35, 70, t);
+                oceanB = lerp(120, 160, t);
 
-                landR = lerp(30, 90, t);
-                landG = lerp(110, 140, t);
-                landB = lerp(30, 50, t);
+                landR = lerp(30, 60, t);
+                landG = lerp(110, 80, t);
+                landB = lerp(30, 25, t);
             } else if (temp < 0.75) {
-                // Toxic Desert: Acidic Yellow/Green Liquids & Rust/Copper Wastelands
+                // Scorched Desert: Toxic Green/Amber & Dark Charcoal Earth
                 const t = (temp - 0.50) / 0.25;
                 oceanR = lerp(80, 140, t);
-                oceanG = lerp(160, 180, t);
-                oceanB = lerp(20, 30, t);
+                oceanG = lerp(140, 110, t);
+                oceanB = lerp(20, 10, t);
 
-                landR = lerp(180, 210, t);
-                landG = lerp(90, 110, t);
-                landB = lerp(30, 40, t);
+                landR = lerp(50, 25, t);
+                landG = lerp(40, 20, t);
+                landB = lerp(35, 18, t);
             } else {
-                // Lava World: Glowing Magma Lakes & Dark Ashy/Obsidian Rock
+                // Lava World: Molten Lava Rivers & Pitch Black Obsidian/Ash
                 const t = (temp - 0.75) / 0.25;
-                oceanR = lerp(255, 220, t);
-                oceanG = lerp(60, 20, t);
+                oceanR = lerp(255, 200, t);
+                oceanG = lerp(60, 15, t);
                 oceanB = lerp(0, 0, t);
 
-                landR = lerp(15, 35, t);
-                landG = lerp(15, 30, t);
-                landB = lerp(20, 35, t);
+                // Pitch Black Ash Palette
+                landR = lerp(12, 3, t);
+                landG = lerp(12, 3, t);
+                landB = lerp(15, 5, t);
             }
 
             const seaLevel = 0.48;
@@ -236,10 +237,11 @@ HTML_CLIENT = """
         }
 
         // ==============================================================================
-        // PLANETS MANAGER
+        // PLANETS MANAGER (SEAMLESS DISTANCE BASED UNLOADING)
         // ==============================================================================
         const PLANET_CHUNK_SIZE = 60000;
-        const PLANET_DRAW_RADIUS = 1;
+        const PLANET_DRAW_RADIUS = 2; // Extended chunk buffer
+        const UNLOAD_DISTANCE_THRESHOLD = 180000; // Hard distance limit prevents premature unloads near planets
         const planetChunks = {};
 
         function createPlanetChunk(cx, cy, cz) {
@@ -271,11 +273,11 @@ HTML_CLIENT = """
                 map: textures.colorTex,
                 bumpMap: textures.bumpTex,
                 bumpScale: 150,
-                roughness: textures.isLava ? 0.4 : 0.8,
-                metalness: textures.isLava ? 0.3 : 0.1,
+                roughness: textures.isLava ? 0.3 : 0.8,
+                metalness: textures.isLava ? 0.4 : 0.1,
                 emissiveMap: textures.isLava ? textures.colorTex : null,
-                emissive: textures.isLava ? 0xff3300 : 0x000000,
-                emissiveIntensity: textures.isLava ? 0.6 : 0.0
+                emissive: textures.isLava ? 0xff2200 : 0x000000,
+                emissiveIntensity: textures.isLava ? 0.8 : 0.0
             });
 
             const mesh = new THREE.Mesh(geom, mat);
@@ -298,30 +300,35 @@ HTML_CLIENT = """
             const currentChunkY = Math.floor(playerY / PLANET_CHUNK_SIZE);
             const currentChunkZ = Math.floor(playerZ / PLANET_CHUNK_SIZE);
 
-            const activeKeys = new Set();
-
+            // 1. Populate nearby chunks
             for (let x = -PLANET_DRAW_RADIUS; x <= PLANET_DRAW_RADIUS; x++) {
                 for (let y = -PLANET_DRAW_RADIUS; y <= PLANET_DRAW_RADIUS; y++) {
                     for (let z = -PLANET_DRAW_RADIUS; z <= PLANET_DRAW_RADIUS; z++) {
                         const cx = currentChunkX + x;
                         const cy = currentChunkY + y;
                         const cz = currentChunkZ + z;
-                        const key = `${cx},${cy},${cz}`;
-                        
-                        activeKeys.add(key);
                         createPlanetChunk(cx, cy, cz);
                     }
                 }
             }
 
+            // 2. Unload planets based on physical distance to prevent popping near planets
             for (let key in planetChunks) {
-                if (!activeKeys.has(key)) {
-                    if (planetChunks[key] && planetChunks[key].mesh) {
-                        scene.remove(planetChunks[key].mesh);
-                        if (planetChunks[key].mesh.material.map) planetChunks[key].mesh.material.map.dispose();
-                        if (planetChunks[key].mesh.material.bumpMap) planetChunks[key].mesh.material.bumpMap.dispose();
-                        planetChunks[key].mesh.geometry.dispose();
-                        planetChunks[key].mesh.material.dispose();
+                const planet = planetChunks[key];
+                if (!planet) continue;
+
+                const dx = planet.x - playerX;
+                const dy = planet.z - playerY;
+                const dz = planet.y - playerZ;
+                const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+
+                if (dist > UNLOAD_DISTANCE_THRESHOLD) {
+                    if (planet.mesh) {
+                        scene.remove(planet.mesh);
+                        if (planet.mesh.material.map) planet.mesh.material.map.dispose();
+                        if (planet.mesh.material.bumpMap) planet.mesh.material.bumpMap.dispose();
+                        planet.mesh.geometry.dispose();
+                        planet.mesh.material.dispose();
                     }
                     delete planetChunks[key];
                 }
