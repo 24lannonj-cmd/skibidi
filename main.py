@@ -66,10 +66,10 @@ HTML_CLIENT = """
         renderer.setPixelRatio(window.devicePixelRatio);
         document.body.appendChild(renderer.domElement);
 
-        const ambientLight = new THREE.AmbientLight(0x333355, 1.5);
+        const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
         scene.add(ambientLight);
 
-        const sunLight = new THREE.DirectionalLight(0xffffff, 2.0);
+        const sunLight = new THREE.DirectionalLight(0xffffff, 2.5);
         sunLight.position.set(15000, 30000, 15000);
         scene.add(sunLight);
 
@@ -80,8 +80,17 @@ HTML_CLIENT = """
             return x - Math.floor(x);
         }
 
+        // Shared helper function for multi-octave spherical noise calculation
+        function getPlanetNoise(simplex, nx, ny, nz) {
+            // Higher base scale ensures multiple continents wrap all around the sphere
+            let n1 = (simplex.noise3D(nx * 2.5, ny * 2.5, nz * 2.5) + 1) * 0.5 * 0.65;
+            let n2 = (simplex.noise3D(nx * 6.0, ny * 6.0, nz * 6.0) + 1) * 0.5 * 0.25;
+            let n3 = (simplex.noise3D(nx * 14.0, ny * 14.0, nz * 14.0) + 1) * 0.5 * 0.10;
+            return n1 + n2 + n3;
+        }
+
         // ==============================================================================
-        // SEAMLESS 3D SPHERICAL PLANET TEXTURE & BUMP MAP GENERATOR
+        // SEAMLESS 3D SPHERICAL PLANET TEXTURE GENERATOR
         // ==============================================================================
         function generatePlanetTexture(seed) {
             const simplex = new SimplexNoise(seed.toString());
@@ -92,19 +101,13 @@ HTML_CLIENT = """
             const ctx = canvas.getContext('2d');
             const imgData = ctx.createImageData(canvas.width, canvas.height);
 
-            const bumpCanvas = document.createElement('canvas');
-            bumpCanvas.width = 512;
-            bumpCanvas.height = 256;
-            const bumpCtx = bumpCanvas.getContext('2d');
-            const bumpData = bumpCtx.createImageData(bumpCanvas.width, bumpCanvas.height);
+            const oceanR = Math.floor(seededRandom(seed) * 20);
+            const oceanG = Math.floor(seededRandom(seed + 1) * 80 + 30);
+            const oceanB = Math.floor(seededRandom(seed + 2) * 150 + 100);
 
-            const oceanR = Math.floor(seededRandom(seed) * 50);
-            const oceanG = Math.floor(seededRandom(seed + 1) * 120 + 50);
-            const oceanB = Math.floor(seededRandom(seed + 2) * 180 + 75);
-
-            const landR = Math.floor(seededRandom(seed + 3) * 180 + 40);
-            const landG = Math.floor(seededRandom(seed + 4) * 180 + 40);
-            const landB = Math.floor(seededRandom(seed + 5) * 80 + 20);
+            const landR = Math.floor(seededRandom(seed + 3) * 150 + 50);
+            const landG = Math.floor(seededRandom(seed + 4) * 180 + 70);
+            const landB = Math.floor(seededRandom(seed + 5) * 60 + 20);
 
             const seaLevel = 0.48;
 
@@ -118,53 +121,41 @@ HTML_CLIENT = """
                     const u = x / canvas.width;
                     const lon = u * Math.PI * 2;
 
-                    const nx = cosLat * Math.cos(lon) * 0.4;
-                    const ny = sinLat * 0.4;
-                    const nz = cosLat * Math.sin(lon) * 0.4;
+                    const nx = cosLat * Math.cos(lon);
+                    const ny = sinLat;
+                    const nz = cosLat * Math.sin(lon);
 
-                    let noiseVal = (simplex.noise3D(nx, ny, nz) + 1) * 0.5;
-                    let detail = (simplex.noise3D(nx * 3, ny * 3, nz * 3)) * 0.12;
-                    let totalHeight = Math.max(0, Math.min(1, noiseVal + detail));
+                    let totalHeight = getPlanetNoise(simplex, nx, ny, nz);
 
                     const i = (y * canvas.width + x) * 4;
 
                     if (totalHeight < seaLevel) {
-                        const oceanDepth = totalHeight / seaLevel;
-                        imgData.data[i]     = oceanR * oceanDepth;
-                        imgData.data[i + 1] = oceanG * oceanDepth;
-                        imgData.data[i + 2] = oceanB * oceanDepth;
-                        
-                        bumpData.data[i] = bumpData.data[i+1] = bumpData.data[i+2] = 0;
+                        const oceanDepth = Math.max(0.2, totalHeight / seaLevel);
+                        imgData.data[i]     = Math.floor(oceanR * oceanDepth);
+                        imgData.data[i + 1] = Math.floor(oceanG * oceanDepth);
+                        imgData.data[i + 2] = Math.floor(oceanB * oceanDepth);
                     } else {
                         const landElev = (totalHeight - seaLevel) / (1 - seaLevel);
-                        imgData.data[i]     = Math.min(255, landR + landElev * 60);
-                        imgData.data[i + 1] = Math.min(255, landG + landElev * 60);
-                        imgData.data[i + 2] = Math.min(255, landB + landElev * 40);
-
-                        const heightByte = Math.floor(landElev * 255);
-                        bumpData.data[i] = bumpData.data[i+1] = bumpData.data[i+2] = heightByte;
+                        imgData.data[i]     = Math.min(255, Math.floor(landR + landElev * 80));
+                        imgData.data[i + 1] = Math.min(255, Math.floor(landG + landElev * 80));
+                        imgData.data[i + 2] = Math.min(255, Math.floor(landB + landElev * 40));
                     }
                     imgData.data[i + 3] = 255;
-                    bumpData.data[i + 3] = 255;
                 }
             }
 
             ctx.putImageData(imgData, 0, 0);
-            bumpCtx.putImageData(bumpData, 0, 0);
 
             const colorTex = new THREE.CanvasTexture(canvas);
             colorTex.minFilter = THREE.LinearFilter;
             colorTex.magFilter = THREE.LinearFilter;
+            colorTex.needsUpdate = true;
 
-            const bumpTex = new THREE.CanvasTexture(bumpCanvas);
-            bumpTex.minFilter = THREE.LinearFilter;
-            bumpTex.magFilter = THREE.LinearFilter;
-
-            return { colorMap: colorTex, bumpMap: bumpTex };
+            return colorTex;
         }
 
         // ==============================================================================
-        // COLOSSAL PLANETS MANAGER WITH SMOOTH CURVED 3D TERRAIN DISPLACEMENT
+        // PLANETS MANAGER WITH MATCHED 3D TERRAIN DISPLACEMENT
         // ==============================================================================
         const PLANET_CHUNK_SIZE = 60000;
         const PLANET_DRAW_RADIUS = 1;
@@ -192,9 +183,8 @@ HTML_CLIENT = """
             seed++;
             const radius = 8000 + seededRandom(seed) * 12000;
             
-            const maps = generatePlanetTexture(seed);
+            const colorTexture = generatePlanetTexture(seed);
 
-            // High-density 128x128 subdivided geometry for fluid curves
             const geom = new THREE.SphereGeometry(radius, 128, 128);
             const posAttr = geom.attributes.position;
             const vertex = new THREE.Vector3();
@@ -207,10 +197,7 @@ HTML_CLIENT = """
                 vertex.fromBufferAttribute(posAttr, i);
                 const dir = vertex.clone().normalize();
 
-                // Lower frequency noise multipliers (0.4 & 1.2) smooth out harsh pixelation/steps
-                let noiseVal = (simplex.noise3D(dir.x * 0.4, dir.y * 0.4, dir.z * 0.4) + 1) * 0.5;
-                let detail = (simplex.noise3D(dir.x * 1.2, dir.y * 1.2, dir.z * 1.2)) * 0.12;
-                let totalHeight = Math.max(0, Math.min(1, noiseVal + detail));
+                let totalHeight = getPlanetNoise(simplex, dir.x, dir.y, dir.z);
 
                 if (totalHeight > seaLevel) {
                     const landElev = (totalHeight - seaLevel) / (1 - seaLevel);
@@ -224,9 +211,9 @@ HTML_CLIENT = """
             geom.computeVertexNormals();
 
             const mat = new THREE.MeshStandardMaterial({ 
-                map: maps.colorMap,
+                map: colorTexture,
                 roughness: 0.8,
-                metalness: 0.05,
+                metalness: 0.1,
                 flatShading: false
             });
 
@@ -304,7 +291,9 @@ HTML_CLIENT = """
             ctx.fillStyle = gradient;
             ctx.fillRect(0, 0, 64, 64);
 
-            return new THREE.CanvasTexture(canvas);
+            const tex = new THREE.CanvasTexture(canvas);
+            tex.needsUpdate = true;
+            return tex;
         }
 
         const TOTAL_STARS = 1000;
@@ -556,7 +545,7 @@ HTML_CLIENT = """
                 me.vy *= 0.987;
                 me.vz *= 0.950;
 
-                // Clamp velocity to prevent UI flickering at top speed
+                // Clamp velocity
                 const newSpeed = Math.sqrt(me.vx * me.vx + me.vy * me.vy + me.vz * me.vz);
                 if (newSpeed > maxSpeed) {
                     const scale = maxSpeed / newSpeed;
@@ -588,9 +577,7 @@ HTML_CLIENT = """
                     const nz = dy / dist;
 
                     const simplex = new SimplexNoise(planet.seed.toString());
-                    let noiseVal = (simplex.noise3D(nx * 0.4, ny * 0.4, nz * 0.4) + 1) * 0.5;
-                    let detail = (simplex.noise3D(nx * 1.2, ny * 1.2, nz * 1.2)) * 0.12;
-                    let totalHeight = Math.max(0, Math.min(1, noiseVal + detail));
+                    let totalHeight = getPlanetNoise(simplex, nx, ny, nz);
 
                     const seaLevel = 0.48;
                     let surfaceRadius = planet.radius;
