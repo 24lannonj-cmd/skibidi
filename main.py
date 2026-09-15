@@ -236,11 +236,11 @@ HTML_CLIENT = """
         }
 
         // ==============================================================================
-        // PLANETS MANAGER (WIDE SPACING ADJUSTMENTS)
+        // PLANETS MANAGER (ORIGINAL CHUNK DISTANCE, REDUCED FREQUENCY)
         // ==============================================================================
-        const PLANET_CHUNK_SIZE = 250000;      // Significantly wider spacing between potential spawns
-        const PLANET_DRAW_RADIUS = 2;          // Render radius in chunk grid units
-        const UNLOAD_DISTANCE_THRESHOLD = 750000; // Keep planets visible further away
+        const PLANET_CHUNK_SIZE = 60000;         // Restored to previous distance
+        const PLANET_DRAW_RADIUS = 5;            // Scaled render radius to cover range
+        const UNLOAD_DISTANCE_THRESHOLD = 360000; 
         const planetChunks = {};
 
         const sharedSphereGeom = new THREE.SphereGeometry(1, 32, 32);
@@ -251,8 +251,8 @@ HTML_CLIENT = """
 
             let seed = (cx * 73856093) ^ (cy * 19349663) ^ (cz * 83492791) ^ GLOBAL_SEED;
 
-            // Sparse spawn probability (only 18% of chunk spaces spawn a planet)
-            if (seededRandom(seed) > 0.18) {
+            // Significantly lower spawn probability (3% chance per chunk)
+            if (seededRandom(seed) > 0.03) {
                 planetChunks[key] = null;
                 return;
             }
