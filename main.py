@@ -236,79 +236,102 @@ HTML_CLIENT = """
         }
 
         // ==============================================================================
-        // PLANETS MANAGER (ORIGINAL CHUNK DISTANCE, REDUCED FREQUENCY)
-        // ==============================================================================
-        const PLANET_CHUNK_SIZE = 60000;         // Restored to previous distance
-        const PLANET_DRAW_RADIUS = 5;            // Scaled render radius to cover range
-        const UNLOAD_DISTANCE_THRESHOLD = 360000; 
-        const planetChunks = {};
+        // PLANET CLUSTER SYSTEM MANAGER (NO MAN'S SKY STYLE)
+        # ==============================================================================
+        const CLUSTER_GRID_SIZE = 80000;         // Distance between solar systems (~80k meters)
+        const CLUSTER_DRAW_RADIUS = 3;           // Render radius of system grids around player
+        const UNLOAD_DISTANCE_THRESHOLD = 300000; 
+        const planetObjects = {};
 
         const sharedSphereGeom = new THREE.SphereGeometry(1, 32, 32);
 
-        function createPlanetChunk(cx, cy, cz) {
-            const key = `${cx},${cy},${cz}`;
-            if (planetChunks[key] !== undefined) return;
-
+        function createSystemCluster(cx, cy, cz) {
+            const clusterKey = `${cx},${cy},${cz}`;
+            
             let seed = (cx * 73856093) ^ (cy * 19349663) ^ (cz * 83492791) ^ GLOBAL_SEED;
 
-            // Significantly lower spawn probability (3% chance per chunk)
-            if (seededRandom(seed) > 0.03) {
-                planetChunks[key] = null;
+            // 50% chance a system grid contains a planetary cluster
+            if (seededRandom(seed) > 0.50) {
                 return;
             }
 
-            seed += 100;
-            const px = (cx + seededRandom(seed)) * PLANET_CHUNK_SIZE;
-            seed += 200;
-            const py = (cy + seededRandom(seed)) * PLANET_CHUNK_SIZE;
-            seed += 300;
-            const pz = (cz + seededRandom(seed)) * PLANET_CHUNK_SIZE;
+            // Cluster center offset inside grid cell
+            seed += 10;
+            const systemCenterX = (cx + 0.2 + seededRandom(seed) * 0.6) * CLUSTER_GRID_SIZE;
+            seed += 20;
+            const systemCenterY = (cy + 0.2 + seededRandom(seed) * 0.6) * CLUSTER_GRID_SIZE;
+            seed += 30;
+            const systemCenterZ = (cz + 0.2 + seededRandom(seed) * 0.6) * CLUSTER_GRID_SIZE;
 
-            seed += 400;
-            const radius = 10000 + seededRandom(seed) * 15000;
-            
-            const textures = generatePlanetTextures(seed);
+            // Spawn 3 to 5 planets per cluster
+            seed += 40;
+            const planetCount = 3 + Math.floor(seededRandom(seed) * 3);
 
-            const mat = new THREE.MeshStandardMaterial({ 
-                map: textures.colorTex,
-                roughness: textures.isLava ? 0.3 : 0.65,
-                metalness: textures.isLava ? 0.4 : 0.1,
-                emissiveMap: textures.isLava ? textures.colorTex : null,
-                emissive: textures.isLava ? 0xff2200 : 0x000000,
-                emissiveIntensity: textures.isLava ? 0.8 : 0.0
-            });
+            for (let p = 0; p < planetCount; p++) {
+                const pKey = `${clusterKey}_p${p}`;
+                if (planetObjects[pKey] !== undefined) continue;
 
-            const mesh = new THREE.Mesh(sharedSphereGeom, mat);
-            mesh.scale.set(radius, radius, radius);
-            mesh.position.set(px, pz, py);
+                seed += 100 + p * 50;
+                const angle = seededRandom(seed) * Math.PI * 2;
+                
+                seed += 101 + p * 50;
+                // Tight distance offset between grouped planets (15k - 30k meters apart)
+                const clusterOffsetDist = 15000 + seededRandom(seed) * 15000;
+                
+                seed += 102 + p * 50;
+                const altOffset = (seededRandom(seed) - 0.5) * 12000;
 
-            scene.add(mesh);
+                const px = systemCenterX + Math.cos(angle) * clusterOffsetDist;
+                const py = systemCenterY + Math.sin(angle) * clusterOffsetDist;
+                const pz = systemCenterZ + altOffset;
 
-            planetChunks[key] = {
-                mesh: mesh,
-                x: px,
-                y: py,
-                z: pz,
-                radius: radius,
-                seed: seed
-            };
+                seed += 103 + p * 50;
+                const radius = 6000 + seededRandom(seed) * 9000;
+
+                const textures = generatePlanetTextures(seed);
+
+                const mat = new THREE.MeshStandardMaterial({ 
+                    map: textures.colorTex,
+                    roughness: textures.isLava ? 0.3 : 0.65,
+                    metalness: textures.isLava ? 0.4 : 0.1,
+                    emissiveMap: textures.isLava ? textures.colorTex : null,
+                    emissive: textures.isLava ? 0xff2200 : 0x000000,
+                    emissiveIntensity: textures.isLava ? 0.8 : 0.0
+                });
+
+                const mesh = new THREE.Mesh(sharedSphereGeom, mat);
+                mesh.scale.set(radius, radius, radius);
+                mesh.position.set(px, pz, py);
+
+                scene.add(mesh);
+
+                planetObjects[pKey] = {
+                    mesh: mesh,
+                    x: px,
+                    y: py,
+                    z: pz,
+                    radius: radius,
+                    clusterKey: clusterKey,
+                    seed: seed
+                };
+            }
         }
 
-        function updatePlanetChunks(playerX, playerY, playerZ) {
-            const currentChunkX = Math.floor(playerX / PLANET_CHUNK_SIZE);
-            const currentChunkY = Math.floor(playerY / PLANET_CHUNK_SIZE);
-            const currentChunkZ = Math.floor(playerZ / PLANET_CHUNK_SIZE);
+        function updatePlanetClusters(playerX, playerY, playerZ) {
+            const currentChunkX = Math.floor(playerX / CLUSTER_GRID_SIZE);
+            const currentChunkY = Math.floor(playerY / CLUSTER_GRID_SIZE);
+            const currentChunkZ = Math.floor(playerZ / CLUSTER_GRID_SIZE);
 
-            for (let x = -PLANET_DRAW_RADIUS; x <= PLANET_DRAW_RADIUS; x++) {
-                for (let y = -PLANET_DRAW_RADIUS; y <= PLANET_DRAW_RADIUS; y++) {
-                    for (let z = -PLANET_DRAW_RADIUS; z <= PLANET_DRAW_RADIUS; z++) {
-                        createPlanetChunk(currentChunkX + x, currentChunkY + y, currentChunkZ + z);
+            for (let x = -CLUSTER_DRAW_RADIUS; x <= CLUSTER_DRAW_RADIUS; x++) {
+                for (let y = -CLUSTER_DRAW_RADIUS; y <= CLUSTER_DRAW_RADIUS; y++) {
+                    for (let z = -CLUSTER_DRAW_RADIUS; z <= CLUSTER_DRAW_RADIUS; z++) {
+                        createSystemCluster(currentChunkX + x, currentChunkY + y, currentChunkZ + z);
                     }
                 }
             }
 
-            for (let key in planetChunks) {
-                const planet = planetChunks[key];
+            for (let key in planetObjects) {
+                const planet = planetObjects[key];
                 if (!planet) continue;
 
                 const dx = planet.x - playerX;
@@ -321,13 +344,13 @@ HTML_CLIENT = """
                         scene.remove(planet.mesh);
                         planet.mesh.material.dispose();
                     }
-                    delete planetChunks[key];
+                    delete planetObjects[key];
                 }
             }
 
             let totalPlanets = 0;
-            for (let key in planetChunks) {
-                if (planetChunks[key]) totalPlanets++;
+            for (let key in planetObjects) {
+                if (planetObjects[key]) totalPlanets++;
             }
             document.getElementById('planet-count').innerText = totalPlanets;
         }
@@ -342,8 +365,8 @@ HTML_CLIENT = """
             let nearestPlanet = null;
             let minDistance = Infinity;
 
-            for (let key in planetChunks) {
-                const planet = planetChunks[key];
+            for (let key in planetObjects) {
+                const planet = planetObjects[key];
                 if (!planet) continue;
 
                 const dx = planet.x - playerX;
@@ -706,8 +729,8 @@ HTML_CLIENT = """
                 me.z += me.vz;
 
                 const shipRadius = 12;
-                for (let key in planetChunks) {
-                    const planet = planetChunks[key];
+                for (let key in planetObjects) {
+                    const planet = planetObjects[key];
                     if (!planet) continue;
 
                     const dx = me.x - planet.x;
@@ -800,7 +823,7 @@ HTML_CLIENT = """
                 updateCameraPosition(me);
 
                 updateStarPool(me.x, me.z || 0, me.y);
-                updatePlanetChunks(me.x, me.z || 0, me.y);
+                updatePlanetClusters(me.x, me.z || 0, me.y);
                 updatePlanetPointer(me.x, me.z || 0, me.y);
 
                 const posArr = originLine.geometry.attributes.position.array;
