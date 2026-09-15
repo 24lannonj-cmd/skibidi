@@ -110,6 +110,25 @@ HTML_CLIENT = """
             return a + (b - a) * t;
         }
 
+        // Multi-stop color lerping for ultra-smooth dynamic blending
+        function sampleGradient(palette, t) {
+            t = Math.max(0, Math.min(1, t));
+            for (let i = 0; i < palette.length - 1; i++) {
+                const cur = palette[i];
+                const next = palette[i + 1];
+                if (t >= cur.pos && t <= next.pos) {
+                    const localT = (t - cur.pos) / (next.pos - cur.pos);
+                    return {
+                        r: lerp(cur.r, next.r, localT),
+                        g: lerp(cur.g, next.g, localT),
+                        b: lerp(cur.b, next.b, localT)
+                    };
+                }
+            }
+            const last = palette[palette.length - 1];
+            return { r: last.r, g: last.g, b: last.b };
+        }
+
         function getPlanetNoise(simplex, nx, ny, nz) {
             let n1 = (simplex.noise3D(nx * 2.5, ny * 2.5, nz * 2.5) + 1) * 0.5 * 0.65;
             let n2 = (simplex.noise3D(nx * 6.0, ny * 6.0, nz * 6.0) + 1) * 0.5 * 0.25;
@@ -135,39 +154,55 @@ HTML_CLIENT = """
             const imgDataColor = ctxColor.createImageData(width, height);
 
             const temp = seededRandom(seed * 3.14159);
-
-            let deepR, deepG, deepB;
-            let shallowR, shallowG, shallowB;
-            let shoreR, shoreG, shoreB;
-            let landR, landG, landB;
+            let palette = [];
 
             if (temp < 0.25) {
-                // Ice World: Deep Abyss Blue -> Cyan Shallow -> Ice Shore -> Snow
-                deepR    = 2;   deepG    = 15;  deepB    = 45;
-                shallowR = 10;  shallowG = 110; shallowB = 180;
-                shoreR   = 130; shoreG   = 200; shoreB   = 235;
-                landR    = 240; landG    = 248; landB    = 255;
+                // Ice World Gradient: Trench Dark -> Deep Blue -> Cyan Shallows -> Frozen Shore -> Ice Plain -> Snow Peaks
+                palette = [
+                    { pos: 0.00, r: 2,   g: 8,   b: 30  },
+                    { pos: 0.20, r: 8,   g: 35,  b: 90  },
+                    { pos: 0.45, r: 20,  g: 130, b: 200 },
+                    { pos: 0.48, r: 120, g: 210, b: 240 },
+                    { pos: 0.52, r: 180, g: 225, b: 245 },
+                    { pos: 0.70, r: 215, g: 235, b: 250 },
+                    { pos: 1.00, r: 255, g: 255, b: 255 }
+                ];
             } else if (temp < 0.50) {
-                // Terran: Dark Ocean -> Vivid Blue Shallow -> Sand Beach -> Lush Land
-                deepR    = 3;   deepG    = 12;  deepB    = 60;
-                shallowR = 0;   shallowG = 90;  shallowB = 210;
-                shoreR   = 210; shoreG   = 190; shoreB   = 130;
-                landR    = 20;  landG    = 160; landB    = 40;
+                // Terran Gradient: Mariana Abyss -> Deep Ocean -> Tropical Teal -> Golden Beach -> Lush Jungle -> Forest -> Rock -> Snow Peak
+                palette = [
+                    { pos: 0.00, r: 1,   g: 5,   b: 25  },
+                    { pos: 0.25, r: 5,   g: 25,  b: 100 },
+                    { pos: 0.45, r: 0,   g: 140, b: 190 },
+                    { pos: 0.48, r: 225, g: 205, b: 140 },
+                    { pos: 0.53, r: 35,  g: 140, b: 45  },
+                    { pos: 0.70, r: 20,  g: 90,  b: 30  },
+                    { pos: 0.85, r: 100, g: 90,  b: 80  },
+                    { pos: 1.00, r: 240, g: 245, b: 250 }
+                ];
             } else if (temp < 0.75) {
-                // Desert: Midnight Abyss -> Teal Shallow -> Gold Coast -> Arid Land
-                deepR    = 2;   deepG    = 10;  deepB    = 40;
-                shallowR = 20;  shallowG = 80;  shallowB = 140;
-                shoreR   = 230; shoreG   = 170; shoreB   = 90;
-                landR    = 220; landG    = 140; landB    = 40;
+                // Desert World Gradient: Pitch Abyss -> Deep Blue -> Shallow Turquoise -> Dune Sands -> Red Canyons -> Scorch Rock
+                palette = [
+                    { pos: 0.00, r: 2,   g: 5,   b: 20  },
+                    { pos: 0.25, r: 10,  g: 40,  b: 90  },
+                    { pos: 0.45, r: 30,  g: 130, b: 150 },
+                    { pos: 0.48, r: 235, g: 185, b: 110 },
+                    { pos: 0.65, r: 205, g: 120, b: 50  },
+                    { pos: 0.85, r: 140, g: 60,  b: 30  },
+                    { pos: 1.00, r: 90,  g: 35,  b: 20  }
+                ];
             } else {
-                // Lava: Dark Cooling Magma -> Intense Red Lava -> Bright Yellow Crust Edge -> Dark Basalt Land
-                deepR    = 45;  deepG    = 0;   deepB    = 0;
-                shallowR = 255; shallowG = 50;  shallowB = 0;
-                shoreR   = 255; shoreG   = 160; shoreB   = 0;
-                landR    = 45;  landG    = 40;  landB    = 42;
+                // Lava World Gradient: Obsidian Crust Trench -> Deep Red Magma -> Bright Orange Lava -> Molten Yellow Edge -> Hot Crust -> Dark Basalt Peaks
+                palette = [
+                    { pos: 0.00, r: 15,  g: 0,   b: 0   },
+                    { pos: 0.20, r: 120, g: 5,   b: 0   },
+                    { pos: 0.40, r: 240, g: 40,  b: 0   },
+                    { pos: 0.47, r: 255, g: 150, b: 0   },
+                    { pos: 0.49, r: 255, g: 220, b: 80  },
+                    { pos: 0.55, r: 70,  g: 55,  b: 50  },
+                    { pos: 0.75, r: 40,  g: 35,  b: 38  },
+                    { pos: 1.00, r: 20,  g: 18,  b: 22  }
+                ];
             }
-
-            const seaLevel = 0.48;
 
             for (let y = 0; y < height; y++) {
                 const v = y / height;
@@ -186,24 +221,12 @@ HTML_CLIENT = """
                     let h = getPlanetNoise(simplex, nx, ny, nz);
                     const i = (y * width + x) * 4;
 
-                    if (h < seaLevel) {
-                        // Calculate Depth Ratio (0 = Shore, 1 = Deepest Ocean Center)
-                        let depth = Math.min(1.0, (seaLevel - h) / 0.18);
+                    // Sample smoothly interpolated RGB color based on continuous height value 'h'
+                    const color = sampleGradient(palette, h);
 
-                        imgDataColor.data[i]     = lerp(shallowR, deepR, depth);
-                        imgDataColor.data[i + 1] = lerp(shallowG, deepG, depth);
-                        imgDataColor.data[i + 2] = lerp(shallowB, deepB, depth);
-                    } else if (h < seaLevel + 0.04) {
-                        // Shoreline / Beach Transition
-                        imgDataColor.data[i]     = shoreR;
-                        imgDataColor.data[i + 1] = shoreG;
-                        imgDataColor.data[i + 2] = shoreB;
-                    } else {
-                        // Land
-                        imgDataColor.data[i]     = landR;
-                        imgDataColor.data[i + 1] = landG;
-                        imgDataColor.data[i + 2] = landB;
-                    }
+                    imgDataColor.data[i]     = color.r;
+                    imgDataColor.data[i + 1] = color.g;
+                    imgDataColor.data[i + 2] = color.b;
                     imgDataColor.data[i + 3] = 255;
                 }
             }
