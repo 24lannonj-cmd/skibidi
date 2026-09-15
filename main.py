@@ -66,7 +66,7 @@ HTML_CLIENT = """
         renderer.setPixelRatio(window.devicePixelRatio);
         document.body.appendChild(renderer.domElement);
 
-        const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
         scene.add(ambientLight);
 
         const sunLight = new THREE.DirectionalLight(0xffffff, 2.5);
@@ -80,9 +80,7 @@ HTML_CLIENT = """
             return x - Math.floor(x);
         }
 
-        // Shared helper function for multi-octave spherical noise calculation
         function getPlanetNoise(simplex, nx, ny, nz) {
-            // Higher base scale ensures multiple continents wrap all around the sphere
             let n1 = (simplex.noise3D(nx * 2.5, ny * 2.5, nz * 2.5) + 1) * 0.5 * 0.65;
             let n2 = (simplex.noise3D(nx * 6.0, ny * 6.0, nz * 6.0) + 1) * 0.5 * 0.25;
             let n3 = (simplex.noise3D(nx * 14.0, ny * 14.0, nz * 14.0) + 1) * 0.5 * 0.10;
@@ -90,16 +88,22 @@ HTML_CLIENT = """
         }
 
         // ==============================================================================
-        // SEAMLESS 3D SPHERICAL PLANET TEXTURE GENERATOR
+        // COLOR & BUMP MAP TEXTURE GENERATORS
         // ==============================================================================
-        function generatePlanetTexture(seed) {
+        function generatePlanetTextures(seed) {
             const simplex = new SimplexNoise(seed.toString());
             
-            const canvas = document.createElement('canvas');
-            canvas.width = 512;
-            canvas.height = 256;
-            const ctx = canvas.getContext('2d');
-            const imgData = ctx.createImageData(canvas.width, canvas.height);
+            const canvasColor = document.createElement('canvas');
+            canvasColor.width = 512;
+            canvasColor.height = 256;
+            const ctxColor = canvasColor.getContext('2d');
+            const imgDataColor = ctxColor.createImageData(canvasColor.width, canvasColor.height);
+
+            const canvasBump = document.createElement('canvas');
+            canvasBump.width = 512;
+            canvasBump.height = 256;
+            const ctxBump = canvasBump.getContext('2d');
+            const imgDataBump = ctxBump.createImageData(canvasBump.width, canvasBump.height);
 
             const oceanR = Math.floor(seededRandom(seed) * 20);
             const oceanG = Math.floor(seededRandom(seed + 1) * 80 + 30);
@@ -111,14 +115,14 @@ HTML_CLIENT = """
 
             const seaLevel = 0.48;
 
-            for (let y = 0; y < canvas.height; y++) {
-                const v = y / canvas.height;
+            for (let y = 0; y < canvasColor.height; y++) {
+                const v = y / canvasColor.height;
                 const lat = (v - 0.5) * Math.PI;
                 const sinLat = Math.sin(lat);
                 const cosLat = Math.cos(lat);
 
-                for (let x = 0; x < canvas.width; x++) {
-                    const u = x / canvas.width;
+                for (let x = 0; x < canvasColor.width; x++) {
+                    const u = x / canvasColor.width;
                     const lon = u * Math.PI * 2;
 
                     const nx = cosLat * Math.cos(lon);
@@ -127,35 +131,47 @@ HTML_CLIENT = """
 
                     let totalHeight = getPlanetNoise(simplex, nx, ny, nz);
 
-                    const i = (y * canvas.width + x) * 4;
+                    const i = (y * canvasColor.width + x) * 4;
 
+                    // COLOR TEXTURE
                     if (totalHeight < seaLevel) {
-                        const oceanDepth = Math.max(0.2, totalHeight / seaLevel);
-                        imgData.data[i]     = Math.floor(oceanR * oceanDepth);
-                        imgData.data[i + 1] = Math.floor(oceanG * oceanDepth);
-                        imgData.data[i + 2] = Math.floor(oceanB * oceanDepth);
+                        imgDataColor.data[i]     = oceanR;
+                        imgDataColor.data[i + 1] = oceanG;
+                        imgDataColor.data[i + 2] = oceanB;
                     } else {
-                        const landElev = (totalHeight - seaLevel) / (1 - seaLevel);
-                        imgData.data[i]     = Math.min(255, Math.floor(landR + landElev * 80));
-                        imgData.data[i + 1] = Math.min(255, Math.floor(landG + landElev * 80));
-                        imgData.data[i + 2] = Math.min(255, Math.floor(landB + landElev * 40));
+                        imgDataColor.data[i]     = landR;
+                        imgDataColor.data[i + 1] = landG;
+                        imgDataColor.data[i + 2] = landB;
                     }
-                    imgData.data[i + 3] = 255;
+                    imgDataColor.data[i + 3] = 255;
+
+                    // BUMP MAP TEXTURE (Heightmap illusion)
+                    // Oceans are smooth (0), land has mountain elevation shading (0-255)
+                    let bumpVal = 0;
+                    if (totalHeight >= seaLevel) {
+                        bumpVal = Math.floor(((totalHeight - seaLevel) / (1.0 - seaLevel)) * 255);
+                    }
+                    imgDataBump.data[i]     = bumpVal;
+                    imgDataBump.data[i + 1] = bumpVal;
+                    imgDataBump.data[i + 2] = bumpVal;
+                    imgDataBump.data[i + 3] = 255;
                 }
             }
 
-            ctx.putImageData(imgData, 0, 0);
+            ctxColor.putImageData(imgDataColor, 0, 0);
+            ctxBump.putImageData(imgDataBump, 0, 0);
 
-            const colorTex = new THREE.CanvasTexture(canvas);
-            colorTex.minFilter = THREE.LinearFilter;
-            colorTex.magFilter = THREE.LinearFilter;
+            const colorTex = new THREE.CanvasTexture(canvasColor);
             colorTex.needsUpdate = true;
 
-            return colorTex;
+            const bumpTex = new THREE.CanvasTexture(canvasBump);
+            bumpTex.needsUpdate = true;
+
+            return { colorTex, bumpTex };
         }
 
         // ==============================================================================
-        // PLANETS MANAGER WITH MATCHED 3D TERRAIN DISPLACEMENT
+        // PLANETS MANAGER (VISUAL BUMP MAPS, ZERO PHYSICAL HEIGHT)
         // ==============================================================================
         const PLANET_CHUNK_SIZE = 60000;
         const PLANET_DRAW_RADIUS = 1;
@@ -183,38 +199,18 @@ HTML_CLIENT = """
             seed++;
             const radius = 8000 + seededRandom(seed) * 12000;
             
-            const colorTexture = generatePlanetTexture(seed);
+            const textures = generatePlanetTextures(seed);
 
-            const geom = new THREE.SphereGeometry(radius, 128, 128);
-            const posAttr = geom.attributes.position;
-            const vertex = new THREE.Vector3();
-            const simplex = new SimplexNoise(seed.toString());
+            // Perfectly smooth base sphere geometry
+            const geom = new THREE.SphereGeometry(radius, 64, 64);
 
-            const seaLevel = 0.48;
-            const maxMountainHeight = radius * 0.08; 
-
-            for (let i = 0; i < posAttr.count; i++) {
-                vertex.fromBufferAttribute(posAttr, i);
-                const dir = vertex.clone().normalize();
-
-                let totalHeight = getPlanetNoise(simplex, dir.x, dir.y, dir.z);
-
-                if (totalHeight > seaLevel) {
-                    const landElev = (totalHeight - seaLevel) / (1 - seaLevel);
-                    const displacement = landElev * maxMountainHeight;
-                    vertex.addScaledVector(dir, displacement);
-                }
-
-                posAttr.setXYZ(i, vertex.x, vertex.y, vertex.z);
-            }
-
-            geom.computeVertexNormals();
-
+            // MeshStandardMaterial with bumpMap renders lit mountains visually without altering geometry
             const mat = new THREE.MeshStandardMaterial({ 
-                map: colorTexture,
+                map: textures.colorTex,
+                bumpMap: textures.bumpTex,
+                bumpScale: 150, // Controls how dramatic the visual mountain height looks
                 roughness: 0.8,
-                metalness: 0.1,
-                flatShading: false
+                metalness: 0.1
             });
 
             const mesh = new THREE.Mesh(geom, mat);
@@ -228,8 +224,7 @@ HTML_CLIENT = """
                 y: py,
                 z: pz,
                 radius: radius,
-                seed: seed,
-                maxMountainHeight: maxMountainHeight
+                seed: seed
             };
         }
 
@@ -259,6 +254,7 @@ HTML_CLIENT = """
                     if (planetChunks[key] && planetChunks[key].mesh) {
                         scene.remove(planetChunks[key].mesh);
                         if (planetChunks[key].mesh.material.map) planetChunks[key].mesh.material.map.dispose();
+                        if (planetChunks[key].mesh.material.bumpMap) planetChunks[key].mesh.material.bumpMap.dispose();
                         planetChunks[key].mesh.geometry.dispose();
                         planetChunks[key].mesh.material.dispose();
                     }
@@ -558,7 +554,7 @@ HTML_CLIENT = """
                 me.y += me.vy;
                 me.z += me.vz;
 
-                // Smooth Terrain Collision Check
+                // Smooth Spherical Collision Check
                 const shipRadius = 12;
                 for (let key in planetChunks) {
                     const planet = planetChunks[key];
@@ -569,26 +565,13 @@ HTML_CLIENT = """
                     const dz = me.y - planet.y;
                     const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
-                    const maxPossibleRadius = planet.radius + planet.maxMountainHeight + shipRadius;
-                    if (dist > maxPossibleRadius) continue;
-
-                    const nx = dx / dist;
-                    const ny = dz / dist; 
-                    const nz = dy / dist;
-
-                    const simplex = new SimplexNoise(planet.seed.toString());
-                    let totalHeight = getPlanetNoise(simplex, nx, ny, nz);
-
-                    const seaLevel = 0.48;
-                    let surfaceRadius = planet.radius;
-                    if (totalHeight > seaLevel) {
-                        const landElev = (totalHeight - seaLevel) / (1 - seaLevel);
-                        surfaceRadius += landElev * planet.maxMountainHeight;
-                    }
-
-                    const minDist = surfaceRadius + shipRadius;
+                    const minDist = planet.radius + shipRadius;
 
                     if (dist < minDist && dist > 0) {
+                        const nx = dx / dist;
+                        const ny = dz / dist; 
+                        const nz = dy / dist;
+
                         const overlap = minDist - dist;
                         me.x += nx * overlap;
                         me.z += ny * overlap;
