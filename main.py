@@ -84,9 +84,9 @@ HTML_CLIENT = """
 
     <script>
         const scene = new THREE.Scene();
-        scene.fog = new THREE.FogExp2(0x020208, 0.00005);
+        scene.fog = new THREE.FogExp2(0x020208, 0.00002);
 
-        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 250000);
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000000);
         const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
@@ -96,7 +96,7 @@ HTML_CLIENT = """
         scene.add(ambientLight);
 
         const sunLight = new THREE.DirectionalLight(0xffffff, 2.5);
-        sunLight.position.set(15000, 30000, 15000);
+        sunLight.position.set(50000, 100000, 50000);
         scene.add(sunLight);
 
         const GLOBAL_SEED = 987654321;
@@ -110,7 +110,6 @@ HTML_CLIENT = """
             return a + (b - a) * t;
         }
 
-        // Multi-stop color lerping for ultra-smooth dynamic blending
         function sampleGradient(palette, t) {
             t = Math.max(0, Math.min(1, t));
             for (let i = 0; i < palette.length - 1; i++) {
@@ -157,7 +156,6 @@ HTML_CLIENT = """
             let palette = [];
 
             if (temp < 0.25) {
-                // Ice World Gradient: Trench Dark -> Deep Blue -> Cyan Shallows -> Frozen Shore -> Ice Plain -> Snow Peaks
                 palette = [
                     { pos: 0.00, r: 2,   g: 8,   b: 30  },
                     { pos: 0.20, r: 8,   g: 35,  b: 90  },
@@ -168,7 +166,6 @@ HTML_CLIENT = """
                     { pos: 1.00, r: 255, g: 255, b: 255 }
                 ];
             } else if (temp < 0.50) {
-                // Terran Gradient: Mariana Abyss -> Deep Ocean -> Tropical Teal -> Golden Beach -> Lush Jungle -> Forest -> Rock -> Snow Peak
                 palette = [
                     { pos: 0.00, r: 1,   g: 5,   b: 25  },
                     { pos: 0.25, r: 5,   g: 25,  b: 100 },
@@ -180,7 +177,6 @@ HTML_CLIENT = """
                     { pos: 1.00, r: 240, g: 245, b: 250 }
                 ];
             } else if (temp < 0.75) {
-                // Desert World Gradient: Pitch Abyss -> Deep Blue -> Shallow Turquoise -> Dune Sands -> Red Canyons -> Scorch Rock
                 palette = [
                     { pos: 0.00, r: 2,   g: 5,   b: 20  },
                     { pos: 0.25, r: 10,  g: 40,  b: 90  },
@@ -191,7 +187,6 @@ HTML_CLIENT = """
                     { pos: 1.00, r: 90,  g: 35,  b: 20  }
                 ];
             } else {
-                // Lava World Gradient: Obsidian Crust Trench -> Deep Red Magma -> Bright Orange Lava -> Molten Yellow Edge -> Hot Crust -> Dark Basalt Peaks
                 palette = [
                     { pos: 0.00, r: 15,  g: 0,   b: 0   },
                     { pos: 0.20, r: 120, g: 5,   b: 0   },
@@ -221,7 +216,6 @@ HTML_CLIENT = """
                     let h = getPlanetNoise(simplex, nx, ny, nz);
                     const i = (y * width + x) * 4;
 
-                    // Sample smoothly interpolated RGB color based on continuous height value 'h'
                     const color = sampleGradient(palette, h);
 
                     imgDataColor.data[i]     = color.r;
@@ -242,11 +236,11 @@ HTML_CLIENT = """
         }
 
         // ==============================================================================
-        // PLANETS MANAGER
+        // PLANETS MANAGER (WIDE SPACING ADJUSTMENTS)
         // ==============================================================================
-        const PLANET_CHUNK_SIZE = 60000;
-        const PLANET_DRAW_RADIUS = 2;
-        const UNLOAD_DISTANCE_THRESHOLD = 180000;
+        const PLANET_CHUNK_SIZE = 250000;      // Significantly wider spacing between potential spawns
+        const PLANET_DRAW_RADIUS = 2;          // Render radius in chunk grid units
+        const UNLOAD_DISTANCE_THRESHOLD = 750000; // Keep planets visible further away
         const planetChunks = {};
 
         const sharedSphereGeom = new THREE.SphereGeometry(1, 32, 32);
@@ -257,7 +251,8 @@ HTML_CLIENT = """
 
             let seed = (cx * 73856093) ^ (cy * 19349663) ^ (cz * 83492791) ^ GLOBAL_SEED;
 
-            if (seededRandom(seed) > 0.25) {
+            // Sparse spawn probability (only 18% of chunk spaces spawn a planet)
+            if (seededRandom(seed) > 0.18) {
                 planetChunks[key] = null;
                 return;
             }
@@ -270,7 +265,7 @@ HTML_CLIENT = """
             const pz = (cz + seededRandom(seed)) * PLANET_CHUNK_SIZE;
 
             seed += 400;
-            const radius = 8000 + seededRandom(seed) * 12000;
+            const radius = 10000 + seededRandom(seed) * 15000;
             
             const textures = generatePlanetTextures(seed);
 
@@ -450,7 +445,7 @@ HTML_CLIENT = """
         }
 
         const TOTAL_STARS = 800;
-        const STAR_FIELD_RADIUS = 6000;
+        const STAR_FIELD_RADIUS = 12000;
         const starPositions = new Float32Array(TOTAL_STARS * 3);
         const starOrigins = [];
 
@@ -472,7 +467,7 @@ HTML_CLIENT = """
 
         const starGlowTexture = createStarGlowTexture();
         const starMat = new THREE.PointsMaterial({
-            size: 50,
+            size: 80,
             map: starGlowTexture,
             transparent: true,
             blending: THREE.AdditiveBlending,
