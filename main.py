@@ -87,14 +87,14 @@ HTML_CLIENT = """
             const simplex = new SimplexNoise(seed.toString());
             
             const canvas = document.createElement('canvas');
-            canvas.width = 256;
-            canvas.height = 128;
+            canvas.width = 512;
+            canvas.height = 256;
             const ctx = canvas.getContext('2d');
             const imgData = ctx.createImageData(canvas.width, canvas.height);
 
             const bumpCanvas = document.createElement('canvas');
-            bumpCanvas.width = 256;
-            bumpCanvas.height = 128;
+            bumpCanvas.width = 512;
+            bumpCanvas.height = 256;
             const bumpCtx = bumpCanvas.getContext('2d');
             const bumpData = bumpCtx.createImageData(bumpCanvas.width, bumpCanvas.height);
 
@@ -118,12 +118,12 @@ HTML_CLIENT = """
                     const u = x / canvas.width;
                     const lon = u * Math.PI * 2;
 
-                    const nx = cosLat * Math.cos(lon) * 1.5;
-                    const ny = sinLat * 1.5;
-                    const nz = cosLat * Math.sin(lon) * 1.5;
+                    const nx = cosLat * Math.cos(lon) * 0.4;
+                    const ny = sinLat * 0.4;
+                    const nz = cosLat * Math.sin(lon) * 0.4;
 
                     let noiseVal = (simplex.noise3D(nx, ny, nz) + 1) * 0.5;
-                    let detail = (simplex.noise3D(nx * 3, ny * 3, nz * 3)) * 0.15;
+                    let detail = (simplex.noise3D(nx * 3, ny * 3, nz * 3)) * 0.12;
                     let totalHeight = Math.max(0, Math.min(1, noiseVal + detail));
 
                     const i = (y * canvas.width + x) * 4;
@@ -152,14 +152,19 @@ HTML_CLIENT = """
             ctx.putImageData(imgData, 0, 0);
             bumpCtx.putImageData(bumpData, 0, 0);
 
-            return {
-                colorMap: new THREE.CanvasTexture(canvas),
-                bumpMap: new THREE.CanvasTexture(bumpCanvas)
-            };
+            const colorTex = new THREE.CanvasTexture(canvas);
+            colorTex.minFilter = THREE.LinearFilter;
+            colorTex.magFilter = THREE.LinearFilter;
+
+            const bumpTex = new THREE.CanvasTexture(bumpCanvas);
+            bumpTex.minFilter = THREE.LinearFilter;
+            bumpTex.magFilter = THREE.LinearFilter;
+
+            return { colorMap: colorTex, bumpMap: bumpTex };
         }
 
         // ==============================================================================
-        // COLOSSAL PLANETS MANAGER WITH PHYSICAL 3D TERRAIN DISPLACEMENT
+        // COLOSSAL PLANETS MANAGER WITH SMOOTH CURVED 3D TERRAIN DISPLACEMENT
         // ==============================================================================
         const PLANET_CHUNK_SIZE = 60000;
         const PLANET_DRAW_RADIUS = 1;
@@ -189,8 +194,8 @@ HTML_CLIENT = """
             
             const maps = generatePlanetTexture(seed);
 
-            // Generate physically deformed 3D geometry
-            const geom = new THREE.SphereGeometry(radius, 64, 64);
+            // High-density 128x128 subdivided geometry for fluid curves
+            const geom = new THREE.SphereGeometry(radius, 128, 128);
             const posAttr = geom.attributes.position;
             const vertex = new THREE.Vector3();
             const simplex = new SimplexNoise(seed.toString());
@@ -202,8 +207,9 @@ HTML_CLIENT = """
                 vertex.fromBufferAttribute(posAttr, i);
                 const dir = vertex.clone().normalize();
 
-                let noiseVal = (simplex.noise3D(dir.x * 1.5, dir.y * 1.5, dir.z * 1.5) + 1) * 0.5;
-                let detail = (simplex.noise3D(dir.x * 4.5, dir.y * 4.5, dir.z * 4.5)) * 0.15;
+                // Lower frequency noise multipliers (0.4 & 1.2) smooth out harsh pixelation/steps
+                let noiseVal = (simplex.noise3D(dir.x * 0.4, dir.y * 0.4, dir.z * 0.4) + 1) * 0.5;
+                let detail = (simplex.noise3D(dir.x * 1.2, dir.y * 1.2, dir.z * 1.2)) * 0.12;
                 let totalHeight = Math.max(0, Math.min(1, noiseVal + detail));
 
                 if (totalHeight > seaLevel) {
@@ -219,8 +225,9 @@ HTML_CLIENT = """
 
             const mat = new THREE.MeshStandardMaterial({ 
                 map: maps.colorMap,
-                roughness: 0.7,
-                metalness: 0.1
+                roughness: 0.8,
+                metalness: 0.05,
+                flatShading: false
             });
 
             const mesh = new THREE.Mesh(geom, mat);
@@ -562,7 +569,7 @@ HTML_CLIENT = """
                 me.y += me.vy;
                 me.z += me.vz;
 
-                // Physical 3D Terrain Collision Check
+                // Smooth Terrain Collision Check
                 const shipRadius = 12;
                 for (let key in planetChunks) {
                     const planet = planetChunks[key];
@@ -581,8 +588,8 @@ HTML_CLIENT = """
                     const nz = dy / dist;
 
                     const simplex = new SimplexNoise(planet.seed.toString());
-                    let noiseVal = (simplex.noise3D(nx * 1.5, ny * 1.5, nz * 1.5) + 1) * 0.5;
-                    let detail = (simplex.noise3D(nx * 4.5, ny * 4.5, nz * 4.5)) * 0.15;
+                    let noiseVal = (simplex.noise3D(nx * 0.4, ny * 0.4, nz * 0.4) + 1) * 0.5;
+                    let detail = (simplex.noise3D(nx * 1.2, ny * 1.2, nz * 1.2)) * 0.12;
                     let totalHeight = Math.max(0, Math.min(1, noiseVal + detail));
 
                     const seaLevel = 0.48;
