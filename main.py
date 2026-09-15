@@ -8,9 +8,6 @@ from fastapi.responses import HTMLResponse
 
 app = FastAPI()
 
-# ==============================================================================
-# 1. FRONTEND HTML & CSS LAYOUT
-# ==============================================================================
 HTML_CLIENT = """
 <!DOCTYPE html>
 <html>
@@ -63,10 +60,7 @@ HTML_CLIENT = """
             display: none;
         }
     </style>
-    <!-- Three.js Library -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <!-- Simplex Noise Library -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/simplex-noise/2.4.0/simplex-noise.min.js"></script>
 </head>
 <body>
     <div id="ui">
@@ -106,89 +100,93 @@ HTML_CLIENT = """
             return x - Math.floor(x);
         }
 
-        function lerp(start, end, amt) {
-            return (1 - amt) * start + amt * end;
-        }
+        // ==============================================================================
+        // FAST GPU-BASED PLANET SHADER (Replaces CPU Canvas Generation)
+        // ==============================================================================
+        const planetVertexShader = `
+            varying vec3 vNormal;
+            varying vec3 vPosition;
+            void main() {
+                vNormal = normalize(normalMatrix * normal);
+                vPosition = position;
+                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+            }
+        `;
 
-        // Optimized Texture Cache
-        const textureCache = {};
+        const planetFragmentShader = `
+            uniform float uSeed;
+            varying vec3 vNormal;
+            varying vec3 vPosition;
 
-        function generatePlanetTextures(seed) {
-            if (textureCache[seed]) return textureCache[seed];
-
-            const simplex = new SimplexNoise(seed.toString());
-            const width = 256;
-            const height = 128;
-
-            const canvasColor = document.createElement('canvas');
-            canvasColor.width = width;
-            canvasColor.height = height;
-            const ctxColor = canvasColor.getContext('2d');
-            const imgDataColor = ctxColor.createImageData(width, height);
-
-            const temp = seededRandom(seed * 3.14159);
-
-            let oceanR, oceanG, oceanB;
-            let landR, landG, landB;
-
-            if (temp < 0.25) {
-                // Ice World
-                const t = temp / 0.25;
-                oceanR = lerp(10, 30, t); oceanG = lerp(60, 100, t); oceanB = lerp(120, 180, t);
-                landR = lerp(200, 230, t); landG = lerp(220, 240, t); landB = lerp(245, 255, t);
-            } else if (temp < 0.50) {
-                // Terran World
-                const t = (temp - 0.25) / 0.25;
-                oceanR = lerp(5, 20, t); oceanG = lerp(35, 70, t); oceanB = lerp(120, 160, t);
-                landR = lerp(30, 60, t); landG = lerp(110, 80, t); landB = lerp(30, 25, t);
-            } else if (temp < 0.75) {
-                // Scorched World (Darker Land)
-                const t = (temp - 0.50) / 0.25;
-                oceanR = lerp(80, 140, t); oceanG = lerp(140, 110, t); oceanB = lerp(20, 10, t);
-                landR = lerp(40, 20, t); landG = lerp(30, 15, t); landB = lerp(25, 10, t);
-            } else {
-                // Lava World (Warmer = Dark Obsidian / Pitch Black Ash)
-                const t = (temp - 0.75) / 0.25;
-                oceanR = lerp(255, 200, t); oceanG = lerp(60, 15, t); oceanB = 0;
-                landR = lerp(10, 2, t); landG = lerp(10, 2, t); landB = lerp(12, 2, t);
+            // Fast 3D GPU Noise
+            vec4 permute(vec4 x){ return mod(((x*34.0)+1.0)*x, 289.0); }
+            vec4 taylorInvSqrt(vec4 r){ return 1.79284291400159 - 0.85373472095314 * r; }
+            float snoise(vec3 v){
+                const vec2 C = vec2(1.0/6.0, 1.0/3.0);
+                const vec4 D = vec4(0.0, 0.5, 1.0, 2.0);
+                vec3 i  = floor(v + dot(v, C.yyy));
+                vec3 x0 = v - i + dot(i, C.xxx);
+                vec3 g = step(x0.yzx, x0.xyz);
+                vec3 l = 1.0 - g;
+                vec3 i1 = min(g.xyz, l.zxy);
+                vec3 i2 = max(g.xyz, l.zxy);
+                vec3 x1 = x0 - i1 + C.xxx;
+                vec3 x2 = x0 - i2 + C.yyy;
+                vec3 x3 = x0 - D.yyy;
+                i = mod(i, 289.0);
+                vec4 p = permute(permute(permute(
+                            i.z + vec4(0.0, i1.z, i2.z, 1.0))
+                        + i.y + vec4(0.0, i1.y, i2.y, 1.0))
+                        + i.x + vec4(0.0, i1.x, i2.x, 1.0));
+                float n_ = 0.142857142857;
+                vec3 ns = n_ * D.wyz - D.xzx;
+                vec4 j = p - 49.0 * floor(p * n_);
+                vec4 x_ = floor(j * ns.z);
+                vec4 y_ = floor(j - 7.0 * x_);
+                vec4 x = x_ *ns.x + ns.yyyy;
+                vec4 y = y_ *ns.x + ns.yyyy;
+                vec4 h = 1.0 - abs(x) - abs(y);
+                vec4 b0 = vec4(x.xy, y.xy);
+                vec4 b1 = vec4(x.zw, y.zw);
+                vec4 s0 = floor(b0)*2.0 + 1.0;
+                vec4 s1 = floor(b1)*2.0 + 1.0;
+                vec4 sh = -step(h, vec4(0.0));
+                vec4 a0 = b0.xzyw + s0.xzyw*sh.xxyy;
+                vec4 a1 = b1.xzyw + s1.xzyw*sh.zzww;
+                vec3 p0 = vec3(a0.xy, h.x);
+                vec3 p1 = vec3(a0.zw, h.y);
+                vec3 p2 = vec3(a1.xy, h.z);
+                vec3 p3 = vec3(a1.zw, h.w);
+                vec4 norm = taylorInvSqrt(vec4(dot(p0,p0), dot(p1,p1), dot(p2, p2), dot(p3,p3)));
+                p0 *= norm.x; p1 *= norm.y; p2 *= norm.z; p3 *= norm.w;
+                vec4 m = max(0.6 - vec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0);
+                m = m * m;
+                return 42.0 * dot(m*m, vec4(dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3)));
             }
 
-            const seaLevel = 0.48;
-            for (let y = 0; y < height; y++) {
-                const v = y / height;
-                const lat = (v - 0.5) * Math.PI;
-                const sinLat = Math.sin(lat);
-                const cosLat = Math.cos(lat);
-
-                for (let x = 0; x < width; x++) {
-                    const u = x / width;
-                    const lon = u * Math.PI * 2;
-                    const nx = cosLat * Math.cos(lon);
-                    const ny = sinLat;
-                    const nz = cosLat * Math.sin(lon);
-
-                    let h = (simplex.noise3D(nx * 2, ny * 2, nz * 2) + 1) * 0.5;
-                    const i = (y * width + x) * 4;
-
-                    if (h < seaLevel) {
-                        imgDataColor.data[i] = oceanR;
-                        imgDataColor.data[i + 1] = oceanG;
-                        imgDataColor.data[i + 2] = oceanB;
-                    } else {
-                        imgDataColor.data[i] = landR;
-                        imgDataColor.data[i + 1] = landG;
-                        imgDataColor.data[i + 2] = landB;
-                    }
-                    imgDataColor.data[i + 3] = 255;
-                }
+            void main() {
+                vec3 normPos = normalize(vPosition);
+                float n = snoise(normPos * 2.5 + vec3(uSeed));
+                
+                vec3 landColor = vec3(0.1, 0.5, 0.2);
+                vec3 waterColor = vec3(0.02, 0.1, 0.4);
+                
+                vec3 baseColor = (n > 0.05) ? landColor : waterColor;
+                
+                // Simple Lighting
+                vec3 lightDir = normalize(vec3(1.0, 2.0, 1.0));
+                float diff = max(dot(vNormal, lightDir), 0.15);
+                
+                gl_FragColor = vec4(baseColor * diff, 1.0);
             }
+        `;
 
-            ctxColor.putImageData(imgDataColor, 0, 0);
-            const colorTex = new THREE.CanvasTexture(canvasColor);
-            
-            const result = { colorTex, isLava: temp >= 0.75 };
-            textureCache[seed] = result;
-            return result;
+        function createPlanetMaterial(seed) {
+            return new THREE.ShaderMaterial({
+                vertexShader: planetVertexShader,
+                fragmentShader: planetFragmentShader,
+                uniforms: { uSeed: { value: seed } }
+            });
         }
 
         // ==============================================================================
@@ -221,18 +219,8 @@ HTML_CLIENT = """
 
             seed += 400;
             const radius = 8000 + seededRandom(seed) * 12000;
-            
-            const textures = generatePlanetTextures(seed);
 
-            const mat = new THREE.MeshStandardMaterial({ 
-                map: textures.colorTex,
-                roughness: textures.isLava ? 0.3 : 0.8,
-                metalness: textures.isLava ? 0.4 : 0.1,
-                emissiveMap: textures.isLava ? textures.colorTex : null,
-                emissive: textures.isLava ? 0xff2200 : 0x000000,
-                emissiveIntensity: textures.isLava ? 0.6 : 0.0
-            });
-
+            const mat = createPlanetMaterial(seed);
             const mesh = new THREE.Mesh(sharedSphereGeom, mat);
             mesh.scale.set(radius, radius, radius);
             mesh.position.set(px, pz, py);
@@ -287,7 +275,7 @@ HTML_CLIENT = """
         }
 
         // ==============================================================================
-        // NEAREST PLANET POINTER
+        // ORIGINAL NAV ARROW & SHIP VISUALS
         // ==============================================================================
         const arrowEl = document.getElementById('nav-arrow');
         const textEl = document.getElementById('nav-text');
@@ -360,9 +348,9 @@ HTML_CLIENT = """
         }
 
         // ==============================================================================
-        // STARFIELD
+        // ORIGINAL STARFIELD
         // ==============================================================================
-        const TOTAL_STARS = 600;
+        const TOTAL_STARS = 1200;
         const STAR_FIELD_RADIUS = 5000;
         const starPositions = new Float32Array(TOTAL_STARS * 3);
         const starOrigins = [];
@@ -415,13 +403,15 @@ HTML_CLIENT = """
         }
 
         // ==============================================================================
-        // SHIP & CLIENT SETUP
+        // ORIGINAL DIAMOND SHIP MESH
         // ==============================================================================
         function createShipMesh(isLocal) {
             const group = new THREE.Group();
-            const hullGeo = new THREE.ConeGeometry(8, 24, 4);
-            hullGeo.rotateX(-Math.PI / 2);
-            const hullMat = new THREE.MeshStandardMaterial({ color: isLocal ? 0x00ff88 : 0xff3344 });
+            const hullGeo = new THREE.OctahedronGeometry(12, 0);
+            const hullMat = new THREE.MeshBasicMaterial({ 
+                color: isLocal ? 0x00ffff : 0xff3344, 
+                wireframe: false 
+            });
             group.add(new THREE.Mesh(hullGeo, hullMat));
             return group;
         }
@@ -468,6 +458,9 @@ HTML_CLIENT = """
             me.vx *= 0.98; me.vy *= 0.98; me.vz *= 0.95;
             me.x += me.vx; me.y += me.vy; me.z += me.vz;
 
+            const speed = Math.sqrt(me.vx * me.vx + me.vy * me.vy + me.vz * me.vz);
+            document.getElementById('speed').innerText = Math.round(speed * 10);
+
             if (ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({ type: 'sync', x: me.x, y: me.y, z: me.z, angle: me.angle, vx: me.vx, vy: me.vy, vz: me.vz }));
             }
@@ -510,9 +503,6 @@ HTML_CLIENT = """
 </html>
 """
 
-# ==============================================================================
-# BACKEND GAME STATE & FASTAPI SERVER
-# ==============================================================================
 game_state = {"players": {}}
 
 class ConnectionManager:
