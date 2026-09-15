@@ -238,7 +238,7 @@ HTML_CLIENT = """
         // ==============================================================================
         // PLANET CLUSTER SYSTEM MANAGER (NO MAN'S SKY STYLE)
         // ==============================================================================
-        const CLUSTER_GRID_SIZE = 80000;         // Distance between solar systems (~80k meters)
+        const CLUSTER_GRID_SIZE = 150000;         // Distance between solar systems (~80k meters)
         const CLUSTER_DRAW_RADIUS = 3;           // Render radius of system grids around player
         const UNLOAD_DISTANCE_THRESHOLD = 300000; 
         const planetObjects = {};
