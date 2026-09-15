@@ -106,10 +106,6 @@ HTML_CLIENT = """
             return x - Math.floor(x);
         }
 
-        function lerp(start, end, amt) {
-            return (1 - amt) * start + amt * end;
-        }
-
         function getPlanetNoise(simplex, nx, ny, nz) {
             let n1 = (simplex.noise3D(nx * 2.5, ny * 2.5, nz * 2.5) + 1) * 0.5 * 0.65;
             let n2 = (simplex.noise3D(nx * 6.0, ny * 6.0, nz * 6.0) + 1) * 0.5 * 0.25;
@@ -117,7 +113,6 @@ HTML_CLIENT = """
             return n1 + n2 + n3;
         }
 
-        // Texture Cache to prevent CPU spikes
         const planetTextureCache = {};
 
         function generatePlanetTextures(seed) {
@@ -126,7 +121,6 @@ HTML_CLIENT = """
             }
 
             const simplex = new SimplexNoise(seed.toString());
-            
             const width = 256;
             const height = 128;
 
@@ -140,27 +134,28 @@ HTML_CLIENT = """
 
             let oceanR, oceanG, oceanB;
             let landR, landG, landB;
+            let shoreR, shoreG, shoreB;
 
             if (temp < 0.25) {
-                // Ice World
-                const t = temp / 0.25;
-                oceanR = lerp(10, 30, t); oceanG = lerp(60, 100, t); oceanB = lerp(120, 180, t);
-                landR = lerp(200, 230, t); landG = lerp(220, 240, t); landB = lerp(245, 255, t);
+                // Ice World: Deep Cyan Oceans vs Bright Snow
+                oceanR = 0;   oceanG = 90;  oceanB = 160;
+                shoreR = 120; shoreG = 200; shoreB = 235;
+                landR  = 240; landG  = 248; landB  = 255;
             } else if (temp < 0.50) {
-                // Terran World
-                const t = (temp - 0.25) / 0.25;
-                oceanR = lerp(5, 20, t); oceanG = lerp(35, 70, t); oceanB = lerp(120, 160, t);
-                landR = lerp(30, 80, t); landG = lerp(110, 160, t); landB = lerp(30, 50, t);
+                // Earthlike Terran: Deep Blue Ocean, Beach Shore, Bright Green Land
+                oceanR = 0;   oceanG = 40;  oceanB = 180;
+                shoreR = 210; shoreG = 190; shoreB = 130;
+                landR  = 20;  landG  = 160; landB  = 40;
             } else if (temp < 0.75) {
-                // Desert World
-                const t = (temp - 0.50) / 0.25;
-                oceanR = lerp(80, 140, t); oceanG = lerp(140, 110, t); oceanB = lerp(20, 10, t);
-                landR = lerp(210, 230, t); landG = lerp(170, 140, t); landB = lerp(80, 50, t);
+                // Desert/Arid World: Dark Blue Water, Golden Sand Land
+                oceanR = 10;  oceanG = 30;  oceanB = 120;
+                shoreR = 230; shoreG = 170; shoreB = 90;
+                landR  = 220; landG  = 140; landB  = 40;
             } else {
-                // Lava World
-                const t = (temp - 0.75) / 0.25;
-                oceanR = lerp(255, 200, t); oceanG = lerp(60, 15, t); oceanB = 0;
-                landR = lerp(60, 30, t); landG = lerp(40, 20, t); landB = lerp(35, 18, t);
+                // Crimson Lava World: Glowing Lava Oceans vs Dark Basalt Land
+                oceanR = 255; oceanG = 50;  oceanB = 0;
+                shoreR = 200; shoreG = 100; shoreB = 0;
+                landR  = 45;  landG  = 40;  landB  = 42;
             }
 
             const seaLevel = 0.48;
@@ -179,17 +174,24 @@ HTML_CLIENT = """
                     const ny = sinLat;
                     const nz = cosLat * Math.sin(lon);
 
-                    let totalHeight = getPlanetNoise(simplex, nx, ny, nz);
+                    let h = getPlanetNoise(simplex, nx, ny, nz);
                     const i = (y * width + x) * 4;
 
-                    if (totalHeight < seaLevel) {
-                        imgDataColor.data[i]     = Math.floor(oceanR);
-                        imgDataColor.data[i + 1] = Math.floor(oceanG);
-                        imgDataColor.data[i + 2] = Math.floor(oceanB);
+                    if (h < seaLevel) {
+                        // Deep Water
+                        imgDataColor.data[i]     = oceanR;
+                        imgDataColor.data[i + 1] = oceanG;
+                        imgDataColor.data[i + 2] = oceanB;
+                    } else if (h < seaLevel + 0.04) {
+                        // Shoreline / Beach Transition
+                        imgDataColor.data[i]     = shoreR;
+                        imgDataColor.data[i + 1] = shoreG;
+                        imgDataColor.data[i + 2] = shoreB;
                     } else {
-                        imgDataColor.data[i]     = Math.floor(landR);
-                        imgDataColor.data[i + 1] = Math.floor(landG);
-                        imgDataColor.data[i + 2] = Math.floor(landB);
+                        // Land
+                        imgDataColor.data[i]     = landR;
+                        imgDataColor.data[i + 1] = landG;
+                        imgDataColor.data[i + 2] = landB;
                     }
                     imgDataColor.data[i + 3] = 255;
                 }
@@ -240,7 +242,7 @@ HTML_CLIENT = """
 
             const mat = new THREE.MeshStandardMaterial({ 
                 map: textures.colorTex,
-                roughness: textures.isLava ? 0.3 : 0.8,
+                roughness: textures.isLava ? 0.3 : 0.65,
                 metalness: textures.isLava ? 0.4 : 0.1,
                 emissiveMap: textures.isLava ? textures.colorTex : null,
                 emissive: textures.isLava ? 0xff2200 : 0x000000,
