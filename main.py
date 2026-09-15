@@ -106,6 +106,10 @@ HTML_CLIENT = """
             return x - Math.floor(x);
         }
 
+        function lerp(a, b, t) {
+            return a + (b - a) * t;
+        }
+
         function getPlanetNoise(simplex, nx, ny, nz) {
             let n1 = (simplex.noise3D(nx * 2.5, ny * 2.5, nz * 2.5) + 1) * 0.5 * 0.65;
             let n2 = (simplex.noise3D(nx * 6.0, ny * 6.0, nz * 6.0) + 1) * 0.5 * 0.25;
@@ -132,30 +136,35 @@ HTML_CLIENT = """
 
             const temp = seededRandom(seed * 3.14159);
 
-            let oceanR, oceanG, oceanB;
-            let landR, landG, landB;
+            let deepR, deepG, deepB;
+            let shallowR, shallowG, shallowB;
             let shoreR, shoreG, shoreB;
+            let landR, landG, landB;
 
             if (temp < 0.25) {
-                // Ice World: Deep Cyan Oceans vs Bright Snow
-                oceanR = 0;   oceanG = 90;  oceanB = 160;
-                shoreR = 120; shoreG = 200; shoreB = 235;
-                landR  = 240; landG  = 248; landB  = 255;
+                // Ice World: Deep Abyss Blue -> Cyan Shallow -> Ice Shore -> Snow
+                deepR    = 2;   deepG    = 15;  deepB    = 45;
+                shallowR = 10;  shallowG = 110; shallowB = 180;
+                shoreR   = 130; shoreG   = 200; shoreB   = 235;
+                landR    = 240; landG    = 248; landB    = 255;
             } else if (temp < 0.50) {
-                // Earthlike Terran: Deep Blue Ocean, Beach Shore, Bright Green Land
-                oceanR = 0;   oceanG = 40;  oceanB = 180;
-                shoreR = 210; shoreG = 190; shoreB = 130;
-                landR  = 20;  landG  = 160; landB  = 40;
+                // Terran: Dark Ocean -> Vivid Blue Shallow -> Sand Beach -> Lush Land
+                deepR    = 3;   deepG    = 12;  deepB    = 60;
+                shallowR = 0;   shallowG = 90;  shallowB = 210;
+                shoreR   = 210; shoreG   = 190; shoreB   = 130;
+                landR    = 20;  landG    = 160; landB    = 40;
             } else if (temp < 0.75) {
-                // Desert/Arid World: Dark Blue Water, Golden Sand Land
-                oceanR = 10;  oceanG = 30;  oceanB = 120;
-                shoreR = 230; shoreG = 170; shoreB = 90;
-                landR  = 220; landG  = 140; landB  = 40;
+                // Desert: Midnight Abyss -> Teal Shallow -> Gold Coast -> Arid Land
+                deepR    = 2;   deepG    = 10;  deepB    = 40;
+                shallowR = 20;  shallowG = 80;  shallowB = 140;
+                shoreR   = 230; shoreG   = 170; shoreB   = 90;
+                landR    = 220; landG    = 140; landB    = 40;
             } else {
-                // Crimson Lava World: Glowing Lava Oceans vs Dark Basalt Land
-                oceanR = 255; oceanG = 50;  oceanB = 0;
-                shoreR = 200; shoreG = 100; shoreB = 0;
-                landR  = 45;  landG  = 40;  landB  = 42;
+                // Lava: Dark Cooling Magma -> Intense Red Lava -> Bright Yellow Crust Edge -> Dark Basalt Land
+                deepR    = 45;  deepG    = 0;   deepB    = 0;
+                shallowR = 255; shallowG = 50;  shallowB = 0;
+                shoreR   = 255; shoreG   = 160; shoreB   = 0;
+                landR    = 45;  landG    = 40;  landB    = 42;
             }
 
             const seaLevel = 0.48;
@@ -178,10 +187,12 @@ HTML_CLIENT = """
                     const i = (y * width + x) * 4;
 
                     if (h < seaLevel) {
-                        // Deep Water
-                        imgDataColor.data[i]     = oceanR;
-                        imgDataColor.data[i + 1] = oceanG;
-                        imgDataColor.data[i + 2] = oceanB;
+                        // Calculate Depth Ratio (0 = Shore, 1 = Deepest Ocean Center)
+                        let depth = Math.min(1.0, (seaLevel - h) / 0.18);
+
+                        imgDataColor.data[i]     = lerp(shallowR, deepR, depth);
+                        imgDataColor.data[i + 1] = lerp(shallowG, deepG, depth);
+                        imgDataColor.data[i + 2] = lerp(shallowB, deepB, depth);
                     } else if (h < seaLevel + 0.04) {
                         // Shoreline / Beach Transition
                         imgDataColor.data[i]     = shoreR;
