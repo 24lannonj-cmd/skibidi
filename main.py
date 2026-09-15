@@ -80,6 +80,10 @@ HTML_CLIENT = """
             return x - Math.floor(x);
         }
 
+        function lerp(start, end, amt) {
+            return (1 - amt) * start + amt * end;
+        }
+
         function getPlanetNoise(simplex, nx, ny, nz) {
             let n1 = (simplex.noise3D(nx * 2.5, ny * 2.5, nz * 2.5) + 1) * 0.5 * 0.65;
             let n2 = (simplex.noise3D(nx * 6.0, ny * 6.0, nz * 6.0) + 1) * 0.5 * 0.25;
@@ -88,7 +92,7 @@ HTML_CLIENT = """
         }
 
         // ==============================================================================
-        // COLOR & BUMP MAP TEXTURE GENERATORS
+        // TEMPERATURE-BASED COLOR & BUMP MAP GENERATOR
         // ==============================================================================
         function generatePlanetTextures(seed) {
             const simplex = new SimplexNoise(seed.toString());
@@ -105,13 +109,48 @@ HTML_CLIENT = """
             const ctxBump = canvasBump.getContext('2d');
             const imgDataBump = ctxBump.createImageData(canvasBump.width, canvasBump.height);
 
-            const oceanR = Math.floor(seededRandom(seed) * 20);
-            const oceanG = Math.floor(seededRandom(seed + 1) * 80 + 30);
-            const oceanB = Math.floor(seededRandom(seed + 2) * 150 + 100);
+            // Derive planet temperature (0.0 = freezing cold, 1.0 = scorching hot)
+            const temp = seededRandom(seed + 10);
 
-            const landR = Math.floor(seededRandom(seed + 3) * 150 + 50);
-            const landG = Math.floor(seededRandom(seed + 4) * 180 + 70);
-            const landB = Math.floor(seededRandom(seed + 5) * 60 + 20);
+            // COLOR PALETTE INTERPOLATION BASED ON TEMPERATURE:
+            // Cold Planet (temp ~ 0.0): Dark deep-blue/black water, icy white/cyan snow land
+            // Temperate Planet (temp ~ 0.5): Earth-like green/brown land, rich blue ocean
+            // Warm/Hot Planet (temp ~ 1.0): Light tropical/cyan water, scorched red/orange desert land
+
+            let oceanR, oceanG, oceanB;
+            let landR, landG, landB;
+
+            if (temp < 0.35) {
+                // Freezing / Ice World
+                const t = temp / 0.35;
+                oceanR = lerp(5, 10, t);
+                oceanG = lerp(15, 40, t);
+                oceanB = lerp(40, 90, t);
+
+                landR = lerp(210, 160, t);
+                landG = lerp(235, 180, t);
+                landB = lerp(255, 200, t);
+            } else if (temp < 0.7) {
+                // Temperate World
+                const t = (temp - 0.35) / 0.35;
+                oceanR = lerp(10, 0, t);
+                oceanG = lerp(40, 120, t);
+                oceanB = lerp(90, 180, t);
+
+                landR = lerp(40, 180, t);
+                landG = lerp(120, 130, t);
+                landB = lerp(40, 40, t);
+            } else {
+                // Hot / Volcanic World
+                const t = (temp - 0.7) / 0.3;
+                oceanR = lerp(0, 40, t);
+                oceanG = lerp(120, 180, t);
+                oceanB = lerp(180, 220, t);
+
+                landR = lerp(180, 230, t);
+                landG = lerp(130, 80, t);
+                landB = lerp(40, 20, t);
+            }
 
             const seaLevel = 0.48;
 
@@ -135,18 +174,17 @@ HTML_CLIENT = """
 
                     // COLOR TEXTURE
                     if (totalHeight < seaLevel) {
-                        imgDataColor.data[i]     = oceanR;
-                        imgDataColor.data[i + 1] = oceanG;
-                        imgDataColor.data[i + 2] = oceanB;
+                        imgDataColor.data[i]     = Math.floor(oceanR);
+                        imgDataColor.data[i + 1] = Math.floor(oceanG);
+                        imgDataColor.data[i + 2] = Math.floor(oceanB);
                     } else {
-                        imgDataColor.data[i]     = landR;
-                        imgDataColor.data[i + 1] = landG;
-                        imgDataColor.data[i + 2] = landB;
+                        imgDataColor.data[i]     = Math.floor(landR);
+                        imgDataColor.data[i + 1] = Math.floor(landG);
+                        imgDataColor.data[i + 2] = Math.floor(landB);
                     }
                     imgDataColor.data[i + 3] = 255;
 
-                    // BUMP MAP TEXTURE (Heightmap illusion)
-                    // Oceans are smooth (0), land has mountain elevation shading (0-255)
+                    // BUMP MAP TEXTURE
                     let bumpVal = 0;
                     if (totalHeight >= seaLevel) {
                         bumpVal = Math.floor(((totalHeight - seaLevel) / (1.0 - seaLevel)) * 255);
@@ -171,7 +209,7 @@ HTML_CLIENT = """
         }
 
         // ==============================================================================
-        // PLANETS MANAGER (VISUAL BUMP MAPS, ZERO PHYSICAL HEIGHT)
+        // PLANETS MANAGER
         // ==============================================================================
         const PLANET_CHUNK_SIZE = 60000;
         const PLANET_DRAW_RADIUS = 1;
@@ -201,14 +239,12 @@ HTML_CLIENT = """
             
             const textures = generatePlanetTextures(seed);
 
-            // Perfectly smooth base sphere geometry
             const geom = new THREE.SphereGeometry(radius, 64, 64);
 
-            // MeshStandardMaterial with bumpMap renders lit mountains visually without altering geometry
             const mat = new THREE.MeshStandardMaterial({ 
                 map: textures.colorTex,
                 bumpMap: textures.bumpTex,
-                bumpScale: 150, // Controls how dramatic the visual mountain height looks
+                bumpScale: 150,
                 roughness: 0.8,
                 metalness: 0.1
             });
