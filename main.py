@@ -38,7 +38,6 @@ HTML_CLIENT = """
         }
         .stat { color: #00ffff; }
         
-        /* NAV POINTER UI OVERLAY */
         #nav-arrow {
             position: absolute;
             width: 0;
@@ -80,14 +79,10 @@ HTML_CLIENT = """
         <p>Controls: WASD (Forward/Turn), X/Z (Ascend/Descend)</p>
     </div>
 
-    <!-- Directional Arrow and Label -->
     <div id="nav-arrow"></div>
     <div id="nav-text">TARGET</div>
 
     <script>
-        // ==============================================================================
-        // 2. THREE.JS SCENE SETUP & LIGHTING
-        // ==============================================================================
         const scene = new THREE.Scene();
         scene.fog = new THREE.FogExp2(0x020208, 0.00005);
 
@@ -106,8 +101,9 @@ HTML_CLIENT = """
 
         const GLOBAL_SEED = 987654321;
 
+        // EVEN-DISTRIBUTION RANDOM HASH
         function seededRandom(seed) {
-            const x = Math.sin(seed) * 10000;
+            let x = Math.sin(seed * 9999) * 10000;
             return x - Math.floor(x);
         }
 
@@ -123,7 +119,7 @@ HTML_CLIENT = """
         }
 
         // ==============================================================================
-        // TEMPERATURE-BASED COLOR & BUMP MAP GENERATOR
+        // BALANCED TEMPERATURE BIOME GENERATOR
         // ==============================================================================
         function generatePlanetTextures(seed) {
             const simplex = new SimplexNoise(seed.toString());
@@ -140,38 +136,42 @@ HTML_CLIENT = """
             const ctxBump = canvasBump.getContext('2d');
             const imgDataBump = ctxBump.createImageData(canvasBump.width, canvasBump.height);
 
-            const temp = seededRandom(seed + 10);
+            // True normalized 0.0 - 1.0 temperature distribution
+            const temp = seededRandom(seed * 3.14159);
 
             let oceanR, oceanG, oceanB;
             let landR, landG, landB;
 
-            if (temp < 0.35) {
-                const t = temp / 0.35;
-                oceanR = lerp(5, 10, t);
-                oceanG = lerp(15, 40, t);
-                oceanB = lerp(40, 90, t);
+            if (temp < 0.33) {
+                // Cold / Ice Planet (0.0 to 0.33)
+                const t = temp / 0.33;
+                oceanR = lerp(5, 15, t);
+                oceanG = lerp(15, 50, t);
+                oceanB = lerp(40, 110, t);
 
-                landR = lerp(210, 160, t);
-                landG = lerp(235, 180, t);
-                landB = lerp(255, 200, t);
-            } else if (temp < 0.7) {
-                const t = (temp - 0.35) / 0.35;
+                landR = lerp(200, 170, t);
+                landG = lerp(230, 200, t);
+                landB = lerp(255, 220, t);
+            } else if (temp < 0.66) {
+                // Temperate / Earth Planet (0.33 to 0.66)
+                const t = (temp - 0.33) / 0.33;
                 oceanR = lerp(10, 0, t);
-                oceanG = lerp(40, 120, t);
-                oceanB = lerp(90, 180, t);
+                oceanG = lerp(50, 120, t);
+                oceanB = lerp(110, 190, t);
 
-                landR = lerp(40, 180, t);
-                landG = lerp(120, 130, t);
-                landB = lerp(40, 40, t);
+                landR = lerp(40, 190, t);
+                landG = lerp(130, 140, t);
+                landB = lerp(40, 30, t);
             } else {
-                const t = (temp - 0.7) / 0.3;
-                oceanR = lerp(0, 40, t);
-                oceanG = lerp(120, 180, t);
-                oceanB = lerp(180, 220, t);
+                // Warm / Scorched Planet (0.66 to 1.0)
+                const t = (temp - 0.66) / 0.34;
+                oceanR = lerp(0, 60, t);
+                oceanG = lerp(150, 210, t);
+                oceanB = lerp(210, 245, t);
 
-                landR = lerp(180, 230, t);
-                landG = lerp(130, 80, t);
-                landB = lerp(40, 20, t);
+                landR = lerp(190, 245, t);
+                landG = lerp(120, 90, t);
+                landB = lerp(30, 10, t);
             }
 
             const seaLevel = 0.48;
@@ -191,7 +191,6 @@ HTML_CLIENT = """
                     const nz = cosLat * Math.sin(lon);
 
                     let totalHeight = getPlanetNoise(simplex, nx, ny, nz);
-
                     const i = (y * canvasColor.width + x) * 4;
 
                     if (totalHeight < seaLevel) {
@@ -241,20 +240,19 @@ HTML_CLIENT = """
 
             let seed = (cx * 73856093) ^ (cy * 19349663) ^ (cz * 83492791) ^ GLOBAL_SEED;
 
-            seed++;
             if (seededRandom(seed) > 0.25) {
                 planetChunks[key] = null;
                 return;
             }
 
-            seed++;
+            seed += 100;
             const px = (cx + seededRandom(seed)) * PLANET_CHUNK_SIZE;
-            seed++;
+            seed += 200;
             const py = (cy + seededRandom(seed)) * PLANET_CHUNK_SIZE;
-            seed++;
+            seed += 300;
             const pz = (cz + seededRandom(seed)) * PLANET_CHUNK_SIZE;
 
-            seed++;
+            seed += 400;
             const radius = 8000 + seededRandom(seed) * 12000;
             
             const textures = generatePlanetTextures(seed);
@@ -360,7 +358,6 @@ HTML_CLIENT = """
             const formattedDist = Math.max(0, Math.round(minDistance));
             document.getElementById('nearest-dist').innerText = `${formattedDist} m`;
 
-            // Project planet 3D position to 2D screen coordinates
             const targetPos = new THREE.Vector3(nearestPlanet.x, nearestPlanet.z, nearestPlanet.y);
             const screenPos = targetPos.clone().project(camera);
 
@@ -370,7 +367,6 @@ HTML_CLIENT = """
             let screenX = (screenPos.x * widthHalf) + widthHalf;
             let screenY = -(screenPos.y * heightHalf) + heightHalf;
 
-            // Handle targets behind camera frustum
             const isBehind = screenPos.z > 1;
 
             const margin = 50;
@@ -400,7 +396,6 @@ HTML_CLIENT = """
                 edgeY = heightHalf + sin * scale;
             }
 
-            // Calculate rotation angle for arrow pointing toward target
             const dx = screenX - edgeX;
             const dy = screenY - edgeY;
             let rotationAngle = Math.atan2(dy, dx) + Math.PI / 2;
@@ -684,12 +679,10 @@ HTML_CLIENT = """
                 if (keys['x'] || keys['X']) me.vz += 0.45;
                 if (keys['z'] || keys['Z']) me.vz -= 0.45;
 
-                // Apply drag
                 me.vx *= 0.987;
                 me.vy *= 0.987;
                 me.vz *= 0.950;
 
-                // Clamp velocity
                 const newSpeed = Math.sqrt(me.vx * me.vx + me.vy * me.vy + me.vz * me.vz);
                 if (newSpeed > maxSpeed) {
                     const scale = maxSpeed / newSpeed;
@@ -702,7 +695,6 @@ HTML_CLIENT = """
                 me.y += me.vy;
                 me.z += me.vz;
 
-                // Smooth Spherical Collision Check
                 const shipRadius = 12;
                 for (let key in planetChunks) {
                     const planet = planetChunks[key];
@@ -744,9 +736,6 @@ HTML_CLIENT = """
             }
         }
 
-        // ==============================================================================
-        // CHASE CAMERA CONTROLS
-        // ==============================================================================
         function updateCameraPosition(me) {
             const cameraDistance = 140; 
             const cameraHeight = 50;    
@@ -767,9 +756,6 @@ HTML_CLIENT = """
             camera.lookAt(lookTarget);
         }
 
-        // ==============================================================================
-        // MAIN GAME LOOP
-        // ==============================================================================
         function animate() {
             requestAnimationFrame(animate);
             updateLocalPhysics();
