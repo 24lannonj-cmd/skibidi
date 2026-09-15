@@ -101,7 +101,6 @@ HTML_CLIENT = """
 
         const GLOBAL_SEED = 987654321;
 
-        // EVEN-DISTRIBUTION RANDOM HASH
         function seededRandom(seed) {
             let x = Math.sin(seed * 9999) * 10000;
             return x - Math.floor(x);
@@ -119,7 +118,7 @@ HTML_CLIENT = """
         }
 
         // ==============================================================================
-        // BALANCED TEMPERATURE BIOME GENERATOR
+        // DISTINCT BIOME COLOR & TEXTURE GENERATOR
         // ==============================================================================
         function generatePlanetTextures(seed) {
             const simplex = new SimplexNoise(seed.toString());
@@ -136,42 +135,51 @@ HTML_CLIENT = """
             const ctxBump = canvasBump.getContext('2d');
             const imgDataBump = ctxBump.createImageData(canvasBump.width, canvasBump.height);
 
-            // True normalized 0.0 - 1.0 temperature distribution
             const temp = seededRandom(seed * 3.14159);
 
             let oceanR, oceanG, oceanB;
             let landR, landG, landB;
 
-            if (temp < 0.33) {
-                // Cold / Ice Planet (0.0 to 0.33)
-                const t = temp / 0.33;
-                oceanR = lerp(5, 15, t);
-                oceanG = lerp(15, 50, t);
-                oceanB = lerp(40, 110, t);
+            if (temp < 0.25) {
+                // Ice World: Deep Frozen Cyan Seas & Pure White/Blue Glaciers
+                const t = temp / 0.25;
+                oceanR = lerp(10, 30, t);
+                oceanG = lerp(60, 100, t);
+                oceanB = lerp(120, 180, t);
 
-                landR = lerp(200, 170, t);
-                landG = lerp(230, 200, t);
-                landB = lerp(255, 220, t);
-            } else if (temp < 0.66) {
-                // Temperate / Earth Planet (0.33 to 0.66)
-                const t = (temp - 0.33) / 0.33;
-                oceanR = lerp(10, 0, t);
-                oceanG = lerp(50, 120, t);
-                oceanB = lerp(110, 190, t);
+                landR = lerp(210, 240, t);
+                landG = lerp(235, 250, t);
+                landB = lerp(255, 255, t);
+            } else if (temp < 0.50) {
+                // Terran / Earth World: Deep Blue Oceans & Rich Green/Brown Continents
+                const t = (temp - 0.25) / 0.25;
+                oceanR = lerp(5, 20, t);
+                oceanG = lerp(35, 80, t);
+                oceanB = lerp(120, 180, t);
 
-                landR = lerp(40, 190, t);
-                landG = lerp(130, 140, t);
-                landB = lerp(40, 30, t);
+                landR = lerp(30, 90, t);
+                landG = lerp(110, 140, t);
+                landB = lerp(30, 50, t);
+            } else if (temp < 0.75) {
+                // Toxic Desert: Acidic Yellow/Green Liquids & Rust/Copper Wastelands
+                const t = (temp - 0.50) / 0.25;
+                oceanR = lerp(80, 140, t);
+                oceanG = lerp(160, 180, t);
+                oceanB = lerp(20, 30, t);
+
+                landR = lerp(180, 210, t);
+                landG = lerp(90, 110, t);
+                landB = lerp(30, 40, t);
             } else {
-                // Warm / Scorched Planet (0.66 to 1.0)
-                const t = (temp - 0.66) / 0.34;
-                oceanR = lerp(0, 60, t);
-                oceanG = lerp(150, 210, t);
-                oceanB = lerp(210, 245, t);
+                // Lava World: Glowing Magma Lakes & Dark Ashy/Obsidian Rock
+                const t = (temp - 0.75) / 0.25;
+                oceanR = lerp(255, 220, t);
+                oceanG = lerp(60, 20, t);
+                oceanB = lerp(0, 0, t);
 
-                landR = lerp(190, 245, t);
-                landG = lerp(120, 90, t);
-                landB = lerp(30, 10, t);
+                landR = lerp(15, 35, t);
+                landG = lerp(15, 30, t);
+                landB = lerp(20, 35, t);
             }
 
             const seaLevel = 0.48;
@@ -224,7 +232,7 @@ HTML_CLIENT = """
             const bumpTex = new THREE.CanvasTexture(canvasBump);
             bumpTex.needsUpdate = true;
 
-            return { colorTex, bumpTex };
+            return { colorTex, bumpTex, isLava: temp >= 0.75 };
         }
 
         // ==============================================================================
@@ -263,8 +271,11 @@ HTML_CLIENT = """
                 map: textures.colorTex,
                 bumpMap: textures.bumpTex,
                 bumpScale: 150,
-                roughness: 0.8,
-                metalness: 0.1
+                roughness: textures.isLava ? 0.4 : 0.8,
+                metalness: textures.isLava ? 0.3 : 0.1,
+                emissiveMap: textures.isLava ? textures.colorTex : null,
+                emissive: textures.isLava ? 0xff3300 : 0x000000,
+                emissiveIntensity: textures.isLava ? 0.6 : 0.0
             });
 
             const mesh = new THREE.Mesh(geom, mat);
