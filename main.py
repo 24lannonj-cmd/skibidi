@@ -123,7 +123,7 @@ HTML_CLIENT = """
                     const nz = cosLat * Math.sin(lon) * 1.5;
 
                     let noiseVal = (simplex.noise3D(nx, ny, nz) + 1) * 0.5;
-                    let detail = (simplex.noise3D(nx * 3, ny * 3, nz * 3)) * 0.15;
+                    let detail = (simplex.noise3D(nx * 3, ny * 3, nz * 3)) * 0.30;
                     let totalHeight = Math.max(0, Math.min(1, noiseVal + detail));
 
                     const i = (y * canvas.width + x) * 4;
