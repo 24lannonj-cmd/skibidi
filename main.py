@@ -37,6 +37,32 @@ HTML_CLIENT = """
             z-index: 10;
         }
         .stat { color: #00ffff; }
+        
+        /* NAV POINTER UI OVERLAY */
+        #nav-arrow {
+            position: absolute;
+            width: 0;
+            height: 0;
+            border-left: 12px solid transparent;
+            border-right: 12px solid transparent;
+            border-bottom: 24px solid #00ffff;
+            filter: drop-shadow(0 0 8px #00ffff);
+            pointer-events: none;
+            z-index: 20;
+            transform-origin: 50% 50%;
+            display: none;
+        }
+        #nav-text {
+            position: absolute;
+            color: #00ffff;
+            font-size: 11px;
+            font-weight: bold;
+            text-shadow: 0 0 5px #00ffff;
+            pointer-events: none;
+            z-index: 20;
+            white-space: nowrap;
+            display: none;
+        }
     </style>
     <!-- Three.js Library -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -50,8 +76,13 @@ HTML_CLIENT = """
         <p>Speed: <span id="speed" class="stat">0</span> m/s</p>
         <p>Pilots Online: <span id="player-count" class="stat">0</span></p>
         <p>Active Planets: <span id="planet-count" class="stat">0</span></p>
+        <p>Nearest Planet: <span id="nearest-dist" class="stat">N/A</span></p>
         <p>Controls: WASD (Forward/Turn), X/Z (Ascend/Descend)</p>
     </div>
+
+    <!-- Directional Arrow and Label -->
+    <div id="nav-arrow"></div>
+    <div id="nav-text">TARGET</div>
 
     <script>
         // ==============================================================================
@@ -109,19 +140,12 @@ HTML_CLIENT = """
             const ctxBump = canvasBump.getContext('2d');
             const imgDataBump = ctxBump.createImageData(canvasBump.width, canvasBump.height);
 
-            // Derive planet temperature (0.0 = freezing cold, 1.0 = scorching hot)
             const temp = seededRandom(seed + 10);
-
-            // COLOR PALETTE INTERPOLATION BASED ON TEMPERATURE:
-            // Cold Planet (temp ~ 0.0): Dark deep-blue/black water, icy white/cyan snow land
-            // Temperate Planet (temp ~ 0.5): Earth-like green/brown land, rich blue ocean
-            // Warm/Hot Planet (temp ~ 1.0): Light tropical/cyan water, scorched red/orange desert land
 
             let oceanR, oceanG, oceanB;
             let landR, landG, landB;
 
             if (temp < 0.35) {
-                // Freezing / Ice World
                 const t = temp / 0.35;
                 oceanR = lerp(5, 10, t);
                 oceanG = lerp(15, 40, t);
@@ -131,7 +155,6 @@ HTML_CLIENT = """
                 landG = lerp(235, 180, t);
                 landB = lerp(255, 200, t);
             } else if (temp < 0.7) {
-                // Temperate World
                 const t = (temp - 0.35) / 0.35;
                 oceanR = lerp(10, 0, t);
                 oceanG = lerp(40, 120, t);
@@ -141,7 +164,6 @@ HTML_CLIENT = """
                 landG = lerp(120, 130, t);
                 landB = lerp(40, 40, t);
             } else {
-                // Hot / Volcanic World
                 const t = (temp - 0.7) / 0.3;
                 oceanR = lerp(0, 40, t);
                 oceanG = lerp(120, 180, t);
@@ -172,7 +194,6 @@ HTML_CLIENT = """
 
                     const i = (y * canvasColor.width + x) * 4;
 
-                    // COLOR TEXTURE
                     if (totalHeight < seaLevel) {
                         imgDataColor.data[i]     = Math.floor(oceanR);
                         imgDataColor.data[i + 1] = Math.floor(oceanG);
@@ -184,7 +205,6 @@ HTML_CLIENT = """
                     }
                     imgDataColor.data[i + 3] = 255;
 
-                    // BUMP MAP TEXTURE
                     let bumpVal = 0;
                     if (totalHeight >= seaLevel) {
                         bumpVal = Math.floor(((totalHeight - seaLevel) / (1.0 - seaLevel)) * 255);
@@ -306,6 +326,98 @@ HTML_CLIENT = """
         }
 
         // ==============================================================================
+        // NEAREST PLANET POINTER LOGIC
+        // ==============================================================================
+        const arrowEl = document.getElementById('nav-arrow');
+        const textEl = document.getElementById('nav-text');
+
+        function updatePlanetPointer(playerX, playerY, playerZ) {
+            let nearestPlanet = null;
+            let minDistance = Infinity;
+
+            for (let key in planetChunks) {
+                const planet = planetChunks[key];
+                if (!planet) continue;
+
+                const dx = planet.x - playerX;
+                const dy = planet.z - playerY; 
+                const dz = planet.y - playerZ;
+                const dist = Math.sqrt(dx * dx + dy * dy + dz * dz) - planet.radius;
+
+                if (dist < minDistance) {
+                    minDistance = dist;
+                    nearestPlanet = planet;
+                }
+            }
+
+            if (!nearestPlanet) {
+                arrowEl.style.display = 'none';
+                textEl.style.display = 'none';
+                document.getElementById('nearest-dist').innerText = 'None in range';
+                return;
+            }
+
+            const formattedDist = Math.max(0, Math.round(minDistance));
+            document.getElementById('nearest-dist').innerText = `${formattedDist} m`;
+
+            // Project planet 3D position to 2D screen coordinates
+            const targetPos = new THREE.Vector3(nearestPlanet.x, nearestPlanet.z, nearestPlanet.y);
+            const screenPos = targetPos.clone().project(camera);
+
+            const widthHalf = window.innerWidth / 2;
+            const heightHalf = window.innerHeight / 2;
+
+            let screenX = (screenPos.x * widthHalf) + widthHalf;
+            let screenY = -(screenPos.y * heightHalf) + heightHalf;
+
+            // Handle targets behind camera frustum
+            const isBehind = screenPos.z > 1;
+
+            const margin = 50;
+            let edgeX = screenX;
+            let edgeY = screenY;
+
+            if (isBehind || screenX < margin || screenX > window.innerWidth - margin || screenY < margin || screenY > window.innerHeight - margin) {
+                if (isBehind) {
+                    edgeX = window.innerWidth - screenX;
+                    edgeY = window.innerHeight - screenY;
+                }
+                const dx = edgeX - widthHalf;
+                const dy = edgeY - heightHalf;
+                const angle = Math.atan2(dy, dx);
+
+                const maxX = widthHalf - margin;
+                const maxY = heightHalf - margin;
+
+                const cos = Math.cos(angle);
+                const sin = Math.sin(angle);
+
+                const scaleX = maxX / Math.abs(cos);
+                const scaleY = maxY / Math.abs(sin);
+                const scale = Math.min(scaleX, scaleY);
+
+                edgeX = widthHalf + cos * scale;
+                edgeY = heightHalf + sin * scale;
+            }
+
+            // Calculate rotation angle for arrow pointing toward target
+            const dx = screenX - edgeX;
+            const dy = screenY - edgeY;
+            let rotationAngle = Math.atan2(dy, dx) + Math.PI / 2;
+            if (isBehind) rotationAngle += Math.PI;
+
+            arrowEl.style.display = 'block';
+            arrowEl.style.left = `${edgeX - 12}px`;
+            arrowEl.style.top = `${edgeY - 12}px`;
+            arrowEl.style.transform = `rotate(${rotationAngle}rad)`;
+
+            textEl.style.display = 'block';
+            textEl.style.left = `${edgeX - 25}px`;
+            textEl.style.top = `${edgeY + 18}px`;
+            textEl.innerText = `${formattedDist}m`;
+        }
+
+        // ==============================================================================
         // UNIFORM 360-DEGREE SPHERICAL STAR POOL
         // ==============================================================================
         function createStarGlowTexture() {
@@ -362,7 +474,7 @@ HTML_CLIENT = """
         starPoolMesh.frustumCulled = false;
         scene.add(starPoolMesh);
 
-        function updateStarPool(px, py, pz, vx, vy, vz, angle) {
+        function updateStarPool(px, py, pz) {
             const posAttr = starGeo.attributes.position;
             const posArray = posAttr.array;
 
@@ -691,8 +803,9 @@ HTML_CLIENT = """
             if (me && shipMeshes[localPlayerId]) {
                 updateCameraPosition(me);
 
-                updateStarPool(me.x, me.z || 0, me.y, me.vx, me.vy, me.vz || 0, me.angle);
+                updateStarPool(me.x, me.z || 0, me.y);
                 updatePlanetChunks(me.x, me.z || 0, me.y);
+                updatePlanetPointer(me.x, me.z || 0, me.y);
 
                 const posArr = originLine.geometry.attributes.position.array;
                 posArr[0] = 0;     
