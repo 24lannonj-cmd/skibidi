@@ -193,7 +193,7 @@ HTML_CLIENT = """
             const mat = new THREE.MeshStandardMaterial({ 
                 map: maps.colorMap,
                 bumpMap: maps.bumpMap,
-                bumpScale: radius * 0.04,
+                bumpScale: radius * 0.10,
                 roughness: 0.65,
                 metalness: 0.1
             });
