@@ -65,8 +65,6 @@ HTML_CLIENT = """
     </style>
     <!-- Three.js Library -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <!-- Simplex Noise Library -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/simplex-noise/2.4.0/simplex-noise.min.js"></script>
 </head>
 <body>
     <div id="ui">
@@ -89,7 +87,7 @@ HTML_CLIENT = """
         const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000000);
         const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
         renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.25));
         document.body.appendChild(renderer.domElement);
 
         const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
@@ -106,156 +104,69 @@ HTML_CLIENT = """
             return x - Math.floor(x);
         }
 
-        function lerp(a, b, t) {
-            return a + (b - a) * t;
-        }
-
-        function sampleGradient(palette, t) {
-            t = Math.max(0, Math.min(1, t));
-            for (let i = 0; i < palette.length - 1; i++) {
-                const cur = palette[i];
-                const next = palette[i + 1];
-                if (t >= cur.pos && t <= next.pos) {
-                    const localT = (t - cur.pos) / (next.pos - cur.pos);
-                    return {
-                        r: lerp(cur.r, next.r, localT),
-                        g: lerp(cur.g, next.g, localT),
-                        b: lerp(cur.b, next.b, localT)
-                    };
-                }
-            }
-            const last = palette[palette.length - 1];
-            return { r: last.r, g: last.g, b: last.b };
-        }
-
-        function getPlanetNoise(simplex, nx, ny, nz) {
-            let n1 = (simplex.noise3D(nx * 2.5, ny * 2.5, nz * 2.5) + 1) * 0.5 * 0.65;
-            let n2 = (simplex.noise3D(nx * 6.0, ny * 6.0, nz * 6.0) + 1) * 0.5 * 0.25;
-            let n3 = (simplex.noise3D(nx * 14.0, ny * 14.0, nz * 14.0) + 1) * 0.5 * 0.10;
-            return n1 + n2 + n3;
-        }
-
         const planetTextureCache = {};
 
+        // FAST PROCEDURAL TEXTURE GENERATION (No Simplex Noise Bottlenecks)
         function generatePlanetTextures(seed) {
             if (planetTextureCache[seed]) {
                 return planetTextureCache[seed];
             }
 
-            const simplex = new SimplexNoise(seed.toString());
-            const width = 256;
-            const height = 128;
-
-            const canvasColor = document.createElement('canvas');
-            canvasColor.width = width;
-            canvasColor.height = height;
-            const ctxColor = canvasColor.getContext('2d');
-            const imgDataColor = ctxColor.createImageData(width, height);
+            const canvas = document.createElement('canvas');
+            canvas.width = 64;
+            canvas.height = 32;
+            const ctx = canvas.getContext('2d');
 
             const temp = seededRandom(seed * 3.14159);
-            let palette = [];
+            const grad = ctx.createLinearGradient(0, 0, 0, 32);
 
+            let isLava = false;
             if (temp < 0.25) {
-                palette = [
-                    { pos: 0.00, r: 2,   g: 8,   b: 30  },
-                    { pos: 0.20, r: 8,   g: 35,  b: 90  },
-                    { pos: 0.45, r: 20,  g: 130, b: 200 },
-                    { pos: 0.48, r: 120, g: 210, b: 240 },
-                    { pos: 0.52, r: 180, g: 225, b: 245 },
-                    { pos: 0.70, r: 215, g: 235, b: 250 },
-                    { pos: 1.00, r: 255, g: 255, b: 255 }
-                ];
+                grad.addColorStop(0.0, '#02081e');
+                grad.addColorStop(0.5, '#1482c8');
+                grad.addColorStop(1.0, '#ffffff');
             } else if (temp < 0.50) {
-                palette = [
-                    { pos: 0.00, r: 1,   g: 5,   b: 25  },
-                    { pos: 0.25, r: 5,   g: 25,  b: 100 },
-                    { pos: 0.45, r: 0,   g: 140, b: 190 },
-                    { pos: 0.48, r: 225, g: 205, b: 140 },
-                    { pos: 0.53, r: 35,  g: 140, b: 45  },
-                    { pos: 0.70, r: 20,  g: 90,  b: 30  },
-                    { pos: 0.85, r: 100, g: 90,  b: 80  },
-                    { pos: 1.00, r: 240, g: 245, b: 250 }
-                ];
+                grad.addColorStop(0.0, '#010519');
+                grad.addColorStop(0.4, '#008cb4');
+                grad.addColorStop(0.6, '#238c2d');
+                grad.addColorStop(1.0, '#f0f5fa');
             } else if (temp < 0.75) {
-                palette = [
-                    { pos: 0.00, r: 2,   g: 5,   b: 20  },
-                    { pos: 0.25, r: 10,  g: 40,  b: 90  },
-                    { pos: 0.45, r: 30,  g: 130, b: 150 },
-                    { pos: 0.48, r: 235, g: 185, b: 110 },
-                    { pos: 0.65, r: 205, g: 120, b: 50  },
-                    { pos: 0.85, r: 140, g: 60,  b: 30  },
-                    { pos: 1.00, r: 90,  g: 35,  b: 20  }
-                ];
+                grad.addColorStop(0.0, '#020514');
+                grad.addColorStop(0.5, '#eb8732');
+                grad.addColorStop(1.0, '#5a2314');
             } else {
-                palette = [
-                    { pos: 0.00, r: 15,  g: 0,   b: 0   },
-                    { pos: 0.20, r: 120, g: 5,   b: 0   },
-                    { pos: 0.40, r: 240, g: 40,  b: 0   },
-                    { pos: 0.47, r: 255, g: 150, b: 0   },
-                    { pos: 0.49, r: 255, g: 220, b: 80  },
-                    { pos: 0.55, r: 70,  g: 55,  b: 50  },
-                    { pos: 0.75, r: 40,  g: 35,  b: 38  },
-                    { pos: 1.00, r: 20,  g: 18,  b: 22  }
-                ];
+                isLava = true;
+                grad.addColorStop(0.0, '#0f0000');
+                grad.addColorStop(0.4, '#f02800');
+                grad.addColorStop(0.7, '#ffdc50');
+                grad.addColorStop(1.0, '#141216');
             }
 
-            for (let y = 0; y < height; y++) {
-                const v = y / height;
-                const lat = (v - 0.5) * Math.PI;
-                const sinLat = Math.sin(lat);
-                const cosLat = Math.cos(lat);
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, 64, 32);
 
-                for (let x = 0; x < width; x++) {
-                    const u = x / width;
-                    const lon = u * Math.PI * 2;
-
-                    const nx = cosLat * Math.cos(lon);
-                    const ny = sinLat;
-                    const nz = cosLat * Math.sin(lon);
-
-                    let h = getPlanetNoise(simplex, nx, ny, nz);
-                    const i = (y * width + x) * 4;
-
-                    const color = sampleGradient(palette, h);
-
-                    imgDataColor.data[i]     = color.r;
-                    imgDataColor.data[i + 1] = color.g;
-                    imgDataColor.data[i + 2] = color.b;
-                    imgDataColor.data[i + 3] = 255;
-                }
-            }
-
-            ctxColor.putImageData(imgDataColor, 0, 0);
-
-            const colorTex = new THREE.CanvasTexture(canvasColor);
-            colorTex.needsUpdate = true;
-
-            const res = { colorTex, isLava: temp >= 0.75 };
+            const colorTex = new THREE.CanvasTexture(canvas);
+            const res = { colorTex, isLava };
             planetTextureCache[seed] = res;
             return res;
         }
 
         // ==============================================================================
-        // PLANET CLUSTER SYSTEM MANAGER (NO MAN'S SKY STYLE)
+        // PLANET CLUSTER SYSTEM MANAGER (OPTIMIZED)
         // ==============================================================================
         const CLUSTER_GRID_SIZE = 200000;        // Distance between solar systems (~200k meters)
-        const CLUSTER_DRAW_RADIUS = 3;           // Render radius of system grids around player
-        const UNLOAD_DISTANCE_THRESHOLD = 700000; 
+        const CLUSTER_DRAW_RADIUS = 1;           // Draw 3x3x3 grid neighborhood around player
+        const UNLOAD_DISTANCE_THRESHOLD = 350000; 
         const planetObjects = {};
 
-        const sharedSphereGeom = new THREE.SphereGeometry(1, 32, 32);
+        const sharedSphereGeom = new THREE.SphereGeometry(1, 16, 16);
 
         function createSystemCluster(cx, cy, cz) {
             const clusterKey = `${cx},${cy},${cz}`;
-            
             let seed = (cx * 73856093) ^ (cy * 19349663) ^ (cz * 83492791) ^ GLOBAL_SEED;
 
-            // 50% chance a system grid contains a planetary cluster
-            if (seededRandom(seed) > 0.50) {
-                return;
-            }
+            if (seededRandom(seed) > 0.50) return;
 
-            // Cluster center offset inside grid cell
             seed += 10;
             const systemCenterX = (cx + 0.2 + seededRandom(seed) * 0.6) * CLUSTER_GRID_SIZE;
             seed += 20;
@@ -263,9 +174,8 @@ HTML_CLIENT = """
             seed += 30;
             const systemCenterZ = (cz + 0.2 + seededRandom(seed) * 0.6) * CLUSTER_GRID_SIZE;
 
-            // Spawn 3 to 5 planets per cluster
             seed += 40;
-            const planetCount = 3 + Math.floor(seededRandom(seed) * 3);
+            const planetCount = 2 + Math.floor(seededRandom(seed) * 2);
 
             for (let p = 0; p < planetCount; p++) {
                 const pKey = `${clusterKey}_p${p}`;
@@ -275,7 +185,6 @@ HTML_CLIENT = """
                 const angle = seededRandom(seed) * Math.PI * 2;
                 
                 seed += 101 + p * 50;
-                // Distance offset between grouped planets (40k - 80k meters apart)
                 const clusterOffsetDist = 40000 + seededRandom(seed) * 40000;
                 
                 seed += 102 + p * 50;
@@ -294,7 +203,6 @@ HTML_CLIENT = """
                     map: textures.colorTex,
                     roughness: textures.isLava ? 0.3 : 0.65,
                     metalness: textures.isLava ? 0.4 : 0.1,
-                    emissiveMap: textures.isLava ? textures.colorTex : null,
                     emissive: textures.isLava ? 0xff2200 : 0x000000,
                     emissiveIntensity: textures.isLava ? 0.8 : 0.0
                 });
@@ -449,25 +357,24 @@ HTML_CLIENT = """
         // ==============================================================================
         function createStarGlowTexture() {
             const canvas = document.createElement('canvas');
-            canvas.width = 64;
-            canvas.height = 64;
+            canvas.width = 32;
+            canvas.height = 32;
             const ctx = canvas.getContext('2d');
 
-            const gradient = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+            const gradient = ctx.createRadialGradient(16, 16, 0, 16, 16, 16);
             gradient.addColorStop(0.0, 'rgba(255, 255, 255, 1.0)'); 
-            gradient.addColorStop(0.2, 'rgba(250, 250, 250, 0.9)'); 
             gradient.addColorStop(0.5, 'rgba(245, 245, 245, 0.3)');  
             gradient.addColorStop(1.0, 'rgba(0, 0, 0, 0)');        
 
             ctx.fillStyle = gradient;
-            ctx.fillRect(0, 0, 64, 64);
+            ctx.fillRect(0, 0, 32, 32);
 
             const tex = new THREE.CanvasTexture(canvas);
             tex.needsUpdate = true;
             return tex;
         }
 
-        const TOTAL_STARS = 800;
+        const TOTAL_STARS = 400;
         const STAR_FIELD_RADIUS = 12000;
         const starPositions = new Float32Array(TOTAL_STARS * 3);
         const starOrigins = [];
@@ -490,7 +397,7 @@ HTML_CLIENT = """
 
         const starGlowTexture = createStarGlowTexture();
         const starMat = new THREE.PointsMaterial({
-            size: 80,
+            size: 60,
             map: starGlowTexture,
             transparent: true,
             blending: THREE.AdditiveBlending,
@@ -546,11 +453,11 @@ HTML_CLIENT = """
         scene.add(originLine);
 
         const trailParticles = [];
-        const particleGeo = new THREE.SphereGeometry(1.2, 6, 6);
+        const particleGeo = new THREE.SphereGeometry(1.2, 4, 4);
         const particleMat = new THREE.MeshBasicMaterial({ color: 0xff6600, transparent: true, opacity: 0.8 });
 
         function spawnTrailParticle(x, y, z, angle) {
-            if (trailParticles.length > 25) return;
+            if (trailParticles.length > 12) return;
             const particle = new THREE.Mesh(particleGeo, particleMat.clone());
             particle.position.set(
                 x - Math.sin(angle) * 12 + (Math.random() - 0.5) * 2,
@@ -564,8 +471,8 @@ HTML_CLIENT = """
         function updateParticles() {
             for (let i = trailParticles.length - 1; i >= 0; i--) {
                 const p = trailParticles[i];
-                p.life -= 0.05;
-                p.mesh.scale.multiplyScalar(0.95);
+                p.life -= 0.1;
+                p.mesh.scale.multiplyScalar(0.92);
                 p.mesh.material.opacity = p.life;
 
                 if (p.life <= 0) {
@@ -593,12 +500,12 @@ HTML_CLIENT = """
             const hull = new THREE.Mesh(hullGeo, hullMat);
             group.add(hull);
 
-            const engineGeo = new THREE.CylinderGeometry(2.5, 0, 14, 8);
+            const engineGeo = new THREE.CylinderGeometry(2.5, 0, 14, 6);
             engineGeo.rotateX(-Math.PI / 2);
             const engineMat = new THREE.MeshStandardMaterial({ 
                 color: 0xff5500,
                 emissive: 0xff4400,
-                emissiveIntensity: 3.0
+                emissiveIntensity: 2.0
             });
             const engine = new THREE.Mesh(engineGeo, engineMat);
             engine.position.z = 12;
@@ -609,13 +516,13 @@ HTML_CLIENT = """
 
         function createStationMesh() {
             const group = new THREE.Group();
-            const ringGeo = new THREE.TorusGeometry(80, 6, 16, 64);
+            const ringGeo = new THREE.TorusGeometry(80, 6, 8, 32);
             const ringMat = new THREE.MeshStandardMaterial({ color: 0x00ffff, metalness: 0.9, roughness: 0.2 });
             const ring = new THREE.Mesh(ringGeo, ringMat);
             ring.rotation.x = Math.PI / 2;
             group.add(ring);
 
-            const coreGeo = new THREE.SphereGeometry(25, 32, 32);
+            const coreGeo = new THREE.SphereGeometry(25, 16, 16);
             const coreMat = new THREE.MeshStandardMaterial({ color: 0x2244aa, metalness: 0.5 });
             const core = new THREE.Mesh(coreGeo, coreMat);
             group.add(core);
