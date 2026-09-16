@@ -107,7 +107,7 @@ HTML_CLIENT = """
         const planetTextureCache = {};
 
         // ==============================================================================
-        # GLOBAL PLANET TEMPERATURE SYSTEM
+        // GLOBAL PLANET TEMPERATURE SYSTEM
         // ==============================================================================
         function generatePlanetTextures(seed) {
             if (planetTextureCache[seed]) {
