@@ -663,8 +663,8 @@ HTML_CLIENT = """
                     me.vz *= 0.90;
                 }
 
-                if (keys['x'] || keys['X']) me.vz += 0.85;
-                if (keys['z'] || keys['Z']) me.vz -= 0.85;
+                if (keys['x'] || keys['X']) me.vz += 1.5;
+                if (keys['z'] || keys['Z']) me.vz -= 1.5;
 
                 me.vx *= 0.987;
                 me.vy *= 0.987;
