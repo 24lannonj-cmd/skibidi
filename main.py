@@ -106,7 +106,9 @@ HTML_CLIENT = """
 
         const planetTextureCache = {};
 
-        // TEMPERATURE SYSTEM PLANET GENERATOR
+        // ==============================================================================
+        # GLOBAL PLANET TEMPERATURE SYSTEM
+        // ==============================================================================
         function generatePlanetTextures(seed) {
             if (planetTextureCache[seed]) {
                 return planetTextureCache[seed];
@@ -120,26 +122,63 @@ HTML_CLIENT = """
             let s = seed;
             const rand = () => { s += 1; return seededRandom(s); };
 
-            // 1. Base Ocean Layer
-            ctx.fillStyle = '#0b3d91';
+            // Determine planet temperature category (0.0 to 1.0)
+            const globalTemp = rand(); 
+
+            let baseColor, continentColor, detailColor, capColor, isLava = false;
+
+            if (globalTemp > 0.82) {
+                // EXTREME HOT: Volcanic Lava World
+                baseColor = '#1a0b0b';       // Dark Basalt Crust
+                continentColor = '#e63900';  // Molten Rivers
+                detailColor = '#ffaa00';     // Glowing Magma Fissures
+                capColor = null;             // No ice caps
+                isLava = true;
+            } else if (globalTemp > 0.62) {
+                // HOT: Arid Desert Planet
+                baseColor = '#8c593b';       // Dry Dunes
+                continentColor = '#d99b00';  // Sand Basins
+                detailColor = '#ffcc66';     // Salt Flats / Light Sand
+                capColor = null;             // No ice caps
+            } else if (globalTemp > 0.38) {
+                // TEMPERATE: Earth-like Planet
+                baseColor = '#0b3d91';       // Oceans
+                continentColor = '#3a7d44';  // Foliage
+                detailColor = '#24522c';     // Mountain ranges
+                capColor = '#ffffff';        // Polar Caps
+            } else if (globalTemp > 0.18) {
+                // COLD: Tundra & Glacial World
+                baseColor = '#2b4450';       // Frozen Deep Waters
+                continentColor = '#607d8b';  // Rocky Tundra Lands
+                detailColor = '#8ca3ad';     // Snow-dusted Peaks
+                capColor = '#e0f7fa';        // Expanded Ice Caps
+            } else {
+                // EXTREME COLD: Frozen Ice World
+                baseColor = '#b2ebf2';       // Glacial Ice Base
+                continentColor = '#e0f7fa';  // Deep Snowfields
+                detailColor = '#ffffff';     // Pure White Glaciers
+                capColor = '#ffffff';        // Entirely Ice Capped
+            }
+
+            // 1. Draw Global Base Layer
+            ctx.fillStyle = baseColor;
             ctx.fillRect(0, 0, 512, 256);
 
-            // 2. Continents with Temperature Gradient (Equator Hot -> Top/Bottom Cold)
-            const continentCount = 4 + Math.floor(rand() * 4);
+            // 2. Draw Temperature-Specific Surface Formations
+            const continentCount = 4 + Math.floor(rand() * 5);
 
             for (let c = 0; c < continentCount; c++) {
                 const cx = rand() * 512;
                 const cy = rand() * 256;
-                const radiusX = 40 + rand() * 60;
-                const radiusY = 30 + rand() * 50;
+                const radiusX = 40 + rand() * 80;
+                const radiusY = 30 + rand() * 60;
 
-                // Base Continent Shape
                 ctx.beginPath();
                 const points = 12;
                 for (let i = 0; i < points; i++) {
                     const angle = (i / points) * Math.PI * 2;
-                    const rX = radiusX * (0.7 + rand() * 0.6);
-                    const rY = radiusY * (0.7 + rand() * 0.6);
+                    const rX = radiusX * (0.6 + rand() * 0.8);
+                    const rY = radiusY * (0.6 + rand() * 0.8);
                     const px = cx + Math.cos(angle) * rX;
                     const py = cy + Math.sin(angle) * rY;
 
@@ -147,26 +186,15 @@ HTML_CLIENT = """
                     else ctx.lineTo(px, py);
                 }
                 ctx.closePath();
-
-                // Determine Temperature based on vertical latitude (Center = Hot, Top/Bottom = Cold)
-                const tempFactor = 1.0 - Math.abs((cy - 128) / 128); // 1.0 at equator, 0.0 at poles
-
-                // Biome selection by Temperature
-                if (tempFactor > 0.65) {
-                    ctx.fillStyle = '#c2a15f'; // Hot Desert / Arid
-                } else if (tempFactor > 0.35) {
-                    ctx.fillStyle = '#3a7d44'; // Temperate Green Land
-                } else {
-                    ctx.fillStyle = '#516857'; // Cold High Tundra
-                }
+                ctx.fillStyle = continentColor;
                 ctx.fill();
 
-                // Inner Mountain / Sub-Biome Layer
+                // Detail Layer (Mountain Chains / Magma Veins)
                 ctx.beginPath();
                 for (let i = 0; i < points; i++) {
                     const angle = (i / points) * Math.PI * 2;
-                    const rX = (radiusX * 0.5) * (0.7 + rand() * 0.5);
-                    const rY = (radiusY * 0.5) * (0.7 + rand() * 0.5);
+                    const rX = (radiusX * 0.4) * (0.6 + rand() * 0.6);
+                    const rY = (radiusY * 0.4) * (0.6 + rand() * 0.6);
                     const px = cx + Math.cos(angle) * rX;
                     const py = cy + Math.sin(angle) * rY;
 
@@ -174,28 +202,31 @@ HTML_CLIENT = """
                     else ctx.lineTo(px, py);
                 }
                 ctx.closePath();
-                ctx.fillStyle = tempFactor > 0.65 ? '#8d6e40' : (tempFactor > 0.35 ? '#24522c' : '#ffffff');
+                ctx.fillStyle = detailColor;
                 ctx.fill();
             }
 
-            // 3. Polar Ice Caps (Coldest Top & Bottom Caps)
-            ctx.fillStyle = '#ffffff';
-            
-            // Top Polar Cap
-            ctx.beginPath();
-            ctx.arc(256, 0, 45 + rand() * 15, 0, Math.PI * 2);
-            ctx.fill();
+            // 3. Ice Caps (Only apply if the temperature permits)
+            if (capColor) {
+                ctx.fillStyle = capColor;
+                const capRadius = globalTemp < 0.18 ? 90 : 45 + rand() * 15;
 
-            // Bottom Polar Cap
-            ctx.beginPath();
-            ctx.arc(256, 256, 45 + rand() * 15, 0, Math.PI * 2);
-            ctx.fill();
+                // North Cap
+                ctx.beginPath();
+                ctx.arc(256, 0, capRadius, 0, Math.PI * 2);
+                ctx.fill();
+
+                // South Cap
+                ctx.beginPath();
+                ctx.arc(256, 256, capRadius, 0, Math.PI * 2);
+                ctx.fill();
+            }
 
             const colorTex = new THREE.CanvasTexture(canvas);
             colorTex.wrapS = THREE.RepeatWrapping;
             colorTex.needsUpdate = true;
 
-            const res = { colorTex, isLava: false };
+            const res = { colorTex, isLava };
             planetTextureCache[seed] = res;
             return res;
         }
@@ -250,8 +281,11 @@ HTML_CLIENT = """
 
                 const mat = new THREE.MeshStandardMaterial({ 
                     map: textures.colorTex,
-                    roughness: 0.6,
-                    metalness: 0.1
+                    roughness: textures.isLava ? 0.4 : 0.7,
+                    metalness: textures.isLava ? 0.3 : 0.1,
+                    emissiveMap: textures.isLava ? textures.colorTex : null,
+                    emissive: textures.isLava ? 0xff4400 : 0x000000,
+                    emissiveIntensity: textures.isLava ? 0.8 : 0.0
                 });
 
                 const mesh = new THREE.Mesh(sharedSphereGeom, mat);
@@ -663,8 +697,8 @@ HTML_CLIENT = """
                     me.vz *= 0.90;
                 }
 
-                if (keys['x'] || keys['X']) me.vz += 1.5;
-                if (keys['z'] || keys['Z']) me.vz -= 1.5;
+                if (keys['x'] || keys['X']) me.vz += 0.85;
+                if (keys['z'] || keys['Z']) me.vz -= 0.85;
 
                 me.vx *= 0.987;
                 me.vy *= 0.987;
