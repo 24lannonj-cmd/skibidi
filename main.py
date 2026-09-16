@@ -106,60 +106,110 @@ HTML_CLIENT = """
 
         const planetTextureCache = {};
 
-        // FAST PROCEDURAL TEXTURE GENERATION (No Simplex Noise Bottlenecks)
+        // FAST HIGH-DETAIL PROCEDURAL CONTINENT & OCEAN TEXTURE GENERATOR
         function generatePlanetTextures(seed) {
             if (planetTextureCache[seed]) {
                 return planetTextureCache[seed];
             }
 
             const canvas = document.createElement('canvas');
-            canvas.width = 64;
-            canvas.height = 32;
+            canvas.width = 256;
+            canvas.height = 128;
             const ctx = canvas.getContext('2d');
 
-            const temp = seededRandom(seed * 3.14159);
-            const grad = ctx.createLinearGradient(0, 0, 0, 32);
+            let s = seed;
+            const rand = () => { s += 11; return seededRandom(s); };
 
-            let isLava = false;
-            if (temp < 0.25) {
-                grad.addColorStop(0.0, '#02081e');
-                grad.addColorStop(0.5, '#1482c8');
-                grad.addColorStop(1.0, '#ffffff');
-            } else if (temp < 0.50) {
-                grad.addColorStop(0.0, '#010519');
-                grad.addColorStop(0.4, '#008cb4');
-                grad.addColorStop(0.6, '#238c2d');
-                grad.addColorStop(1.0, '#f0f5fa');
-            } else if (temp < 0.75) {
-                grad.addColorStop(0.0, '#020514');
-                grad.addColorStop(0.5, '#eb8732');
-                grad.addColorStop(1.0, '#5a2314');
-            } else {
-                isLava = true;
-                grad.addColorStop(0.0, '#0f0000');
-                grad.addColorStop(0.4, '#f02800');
-                grad.addColorStop(0.7, '#ffdc50');
-                grad.addColorStop(1.0, '#141216');
+            const planetType = rand();
+            let oceanColor = '#0b1d3a';
+            let shallowColor = '#1e5f74';
+            let landColors = ['#2d5a27', '#3a7d32', '#8b7355', '#e0d8b0'];
+
+            if (planetType < 0.2) {
+                // Alien Violet / Crimson Ocean
+                oceanColor = '#1a0033';
+                shallowColor = '#4a0e4e';
+                landColors = ['#800020', '#b03060', '#d87093', '#f8f8ff'];
+            } else if (planetType < 0.4) {
+                // Desert World with Tar Oceans
+                oceanColor = '#121212';
+                shallowColor = '#3a2e2b';
+                landColors = ['#8a4b08', '#ba6b1b', '#d99b26', '#f2d06b'];
             }
 
-            ctx.fillStyle = grad;
-            ctx.fillRect(0, 0, 64, 32);
+            // 1. Fill Deep Ocean Base
+            ctx.fillStyle = oceanColor;
+            ctx.fillRect(0, 0, 256, 128);
+
+            // 2. Draw Procedural Landmasses (Continents)
+            const continentCount = 5 + Math.floor(rand() * 6);
+            for (let c = 0; c < continentCount; c++) {
+                const cx = rand() * 256;
+                const cy = rand() * 128;
+                const size = 30 + rand() * 45;
+
+                // Shallow Water Shelf around Continent
+                ctx.fillStyle = shallowColor;
+                ctx.beginPath();
+                ctx.arc(cx, cy, size * 1.25, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Base Continent Shape
+                ctx.fillStyle = landColors[0];
+                ctx.beginPath();
+                const points = 12;
+                for (let i = 0; i < points; i++) {
+                    const angle = (i / points) * Math.PI * 2;
+                    const r = size * (0.6 + rand() * 0.5);
+                    const px = cx + Math.cos(angle) * r;
+                    const py = cy + Math.sin(angle) * r;
+                    if (i === 0) ctx.moveTo(px, py);
+                    else ctx.lineTo(px, py);
+                }
+                ctx.closePath();
+                ctx.fill();
+
+                // Mountain Ranges & Biome Variation Layers
+                for (let layer = 1; layer < landColors.length; layer++) {
+                    ctx.fillStyle = landColors[layer];
+                    ctx.beginPath();
+                    const subPoints = 8;
+                    const subSize = size * (1 - layer * 0.22);
+                    for (let i = 0; i < subPoints; i++) {
+                        const angle = (i / subPoints) * Math.PI * 2;
+                        const r = subSize * (0.5 + rand() * 0.5);
+                        const px = cx + Math.cos(angle) * r;
+                        const py = cy + Math.sin(angle) * r;
+                        if (i === 0) ctx.moveTo(px, py);
+                        else ctx.lineTo(px, py);
+                    }
+                    ctx.closePath();
+                    ctx.fill();
+                }
+            }
+
+            // 3. Ice Caps on Poles
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(128, -20, 45, 0, Math.PI * 2);
+            ctx.arc(128, 148, 45, 0, Math.PI * 2);
+            ctx.fill();
 
             const colorTex = new THREE.CanvasTexture(canvas);
-            const res = { colorTex, isLava };
+            const res = { colorTex, isLava: false };
             planetTextureCache[seed] = res;
             return res;
         }
 
         // ==============================================================================
-        // PLANET CLUSTER SYSTEM MANAGER (OPTIMIZED)
+        // PLANET CLUSTER SYSTEM MANAGER
         // ==============================================================================
-        const CLUSTER_GRID_SIZE = 200000;        // Distance between solar systems (~200k meters)
-        const CLUSTER_DRAW_RADIUS = 1;           // Draw 3x3x3 grid neighborhood around player
+        const CLUSTER_GRID_SIZE = 200000;
+        const CLUSTER_DRAW_RADIUS = 1; 
         const UNLOAD_DISTANCE_THRESHOLD = 350000; 
         const planetObjects = {};
 
-        const sharedSphereGeom = new THREE.SphereGeometry(1, 16, 16);
+        const sharedSphereGeom = new THREE.SphereGeometry(1, 32, 32);
 
         function createSystemCluster(cx, cy, cz) {
             const clusterKey = `${cx},${cy},${cz}`;
@@ -201,10 +251,8 @@ HTML_CLIENT = """
 
                 const mat = new THREE.MeshStandardMaterial({ 
                     map: textures.colorTex,
-                    roughness: textures.isLava ? 0.3 : 0.65,
-                    metalness: textures.isLava ? 0.4 : 0.1,
-                    emissive: textures.isLava ? 0xff2200 : 0x000000,
-                    emissiveIntensity: textures.isLava ? 0.8 : 0.0
+                    roughness: 0.5,
+                    metalness: 0.1
                 });
 
                 const mesh = new THREE.Mesh(sharedSphereGeom, mat);
@@ -702,6 +750,13 @@ HTML_CLIENT = """
             updateParticles();
 
             stationMesh.rotation.y += 0.005;
+
+            // Slow planet rotation for cinematic atmosphere
+            for (let key in planetObjects) {
+                if (planetObjects[key] && planetObjects[key].mesh) {
+                    planetObjects[key].mesh.rotation.y += 0.0008;
+                }
+            }
 
             for (let id in gameState.players) {
                 const p = gameState.players[id];
