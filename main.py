@@ -106,96 +106,106 @@ HTML_CLIENT = """
 
         const planetTextureCache = {};
 
-        // FAST HIGH-DETAIL PROCEDURAL CONTINENT & OCEAN TEXTURE GENERATOR
+        // EARTH-LIKE LATITUDINAL BIOME & OCEAN TEXTURE GENERATOR
         function generatePlanetTextures(seed) {
             if (planetTextureCache[seed]) {
                 return planetTextureCache[seed];
             }
 
             const canvas = document.createElement('canvas');
-            canvas.width = 256;
-            canvas.height = 128;
+            canvas.width = 512;
+            canvas.height = 256;
             const ctx = canvas.getContext('2d');
 
             let s = seed;
             const rand = () => { s += 11; return seededRandom(s); };
 
-            const planetType = rand();
-            let oceanColor = '#0b1d3a';
-            let shallowColor = '#1e5f74';
-            let landColors = ['#2d5a27', '#3a7d32', '#8b7355', '#e0d8b0'];
+            // 1. Fill Base Ocean Gradient (Deep Blue to Shallows)
+            const oceanGrad = ctx.createLinearGradient(0, 0, 0, 256);
+            oceanGrad.addColorStop(0.0, '#0a192f'); // Deep Arctic Water
+            oceanGrad.addColorStop(0.5, '#004080'); // Warm Tropical Ocean
+            oceanGrad.addColorStop(1.0, '#0a192f');
+            ctx.fillStyle = oceanGrad;
+            ctx.fillRect(0, 0, 512, 256);
 
-            if (planetType < 0.2) {
-                // Alien Violet / Crimson Ocean
-                oceanColor = '#1a0033';
-                shallowColor = '#4a0e4e';
-                landColors = ['#800020', '#b03060', '#d87093', '#f8f8ff'];
-            } else if (planetType < 0.4) {
-                // Desert World with Tar Oceans
-                oceanColor = '#121212';
-                shallowColor = '#3a2e2b';
-                landColors = ['#8a4b08', '#ba6b1b', '#d99b26', '#f2d06b'];
-            }
-
-            // 1. Fill Deep Ocean Base
-            ctx.fillStyle = oceanColor;
-            ctx.fillRect(0, 0, 256, 128);
-
-            // 2. Draw Procedural Landmasses (Continents)
-            const continentCount = 5 + Math.floor(rand() * 6);
+            // 2. Generate Base Continents with Latitudinal Biomes
+            const continentCount = 6 + Math.floor(rand() * 4);
             for (let c = 0; c < continentCount; c++) {
-                const cx = rand() * 256;
-                const cy = rand() * 128;
-                const size = 30 + rand() * 45;
+                const cx = rand() * 512;
+                const cy = 30 + rand() * 196; // Keep continents slightly off absolute poles
+                const sizeX = 50 + rand() * 70;
+                const sizeY = 40 + rand() * 50;
 
-                // Shallow Water Shelf around Continent
-                ctx.fillStyle = shallowColor;
+                // Draw Continent Base Layer
+                const points = 16;
                 ctx.beginPath();
-                ctx.arc(cx, cy, size * 1.25, 0, Math.PI * 2);
-                ctx.fill();
-
-                // Base Continent Shape
-                ctx.fillStyle = landColors[0];
-                ctx.beginPath();
-                const points = 12;
                 for (let i = 0; i < points; i++) {
                     const angle = (i / points) * Math.PI * 2;
-                    const r = size * (0.6 + rand() * 0.5);
-                    const px = cx + Math.cos(angle) * r;
-                    const py = cy + Math.sin(angle) * r;
+                    const rx = sizeX * (0.6 + rand() * 0.5);
+                    const ry = sizeY * (0.6 + rand() * 0.5);
+                    const px = cx + Math.cos(angle) * rx;
+                    const py = cy + Math.sin(angle) * ry;
+                    if (i === 0) ctx.moveTo(px, py);
+                    else ctx.lineTo(px, py);
+                }
+                ctx.closePath();
+
+                // Biome Color Mapping based on Latitude (cy)
+                const latRatio = Math.abs(cy - 128) / 128; // 0 = Equator, 1 = Poles
+                
+                let landColor = '#2e6f40'; // Temperate Green
+                if (latRatio < 0.25) {
+                    landColor = rand() > 0.4 ? '#d2b48c' : '#c2a15f'; // Tropical Desert / Savanna
+                } else if (latRatio < 0.65) {
+                    landColor = '#2d5a27'; // Forest / Woodland
+                } else {
+                    landColor = '#5c715e'; // Tundra / Cold Highland
+                }
+
+                ctx.fillStyle = landColor;
+                ctx.fill();
+
+                // Add Mountain Ranges / Inland Detail Layer
+                ctx.fillStyle = latRatio < 0.3 ? '#8b7355' : '#1e3f20';
+                ctx.beginPath();
+                for (let i = 0; i < 8; i++) {
+                    const angle = (i / 8) * Math.PI * 2;
+                    const px = cx + Math.cos(angle) * (sizeX * 0.3);
+                    const py = cy + Math.sin(angle) * (sizeY * 0.3);
                     if (i === 0) ctx.moveTo(px, py);
                     else ctx.lineTo(px, py);
                 }
                 ctx.closePath();
                 ctx.fill();
-
-                // Mountain Ranges & Biome Variation Layers
-                for (let layer = 1; layer < landColors.length; layer++) {
-                    ctx.fillStyle = landColors[layer];
-                    ctx.beginPath();
-                    const subPoints = 8;
-                    const subSize = size * (1 - layer * 0.22);
-                    for (let i = 0; i < subPoints; i++) {
-                        const angle = (i / subPoints) * Math.PI * 2;
-                        const r = subSize * (0.5 + rand() * 0.5);
-                        const px = cx + Math.cos(angle) * r;
-                        const py = cy + Math.sin(angle) * r;
-                        if (i === 0) ctx.moveTo(px, py);
-                        else ctx.lineTo(px, py);
-                    }
-                    ctx.closePath();
-                    ctx.fill();
-                }
             }
 
-            // 3. Ice Caps on Poles
-            ctx.fillStyle = '#ffffff';
-            ctx.beginPath();
-            ctx.arc(128, -20, 45, 0, Math.PI * 2);
-            ctx.arc(128, 148, 45, 0, Math.PI * 2);
-            ctx.fill();
+            // 3. Ice Caps (Polar Glaciers at Top and Bottom)
+            const drawIceCap = (yPos, radius, isTop) => {
+                const iceGrad = ctx.createRadialGradient(256, yPos, 5, 256, yPos, radius);
+                iceGrad.addColorStop(0.0, 'rgba(255, 255, 255, 1.0)');
+                iceGrad.addColorStop(0.7, 'rgba(230, 245, 255, 0.95)');
+                iceGrad.addColorStop(1.0, 'rgba(255, 255, 255, 0.0)');
+
+                ctx.fillStyle = iceGrad;
+                ctx.beginPath();
+                for (let a = 0; a <= Math.PI * 2; a += 0.1) {
+                    const r = radius + Math.sin(a * 7 + seed) * 8;
+                    const px = 256 + Math.cos(a) * (r * 2); 
+                    const py = yPos + Math.sin(a) * (r * 0.6);
+                    if (a === 0) ctx.moveTo(px, py);
+                    else ctx.lineTo(px, py);
+                }
+                ctx.closePath();
+                ctx.fill();
+            };
+
+            drawIceCap(0, 45, true);    // North Pole
+            drawIceCap(256, 45, false); // South Pole
 
             const colorTex = new THREE.CanvasTexture(canvas);
+            colorTex.wrapS = THREE.RepeatWrapping; // Seamless horizontal wrapping
+            colorTex.needsUpdate = true;
+
             const res = { colorTex, isLava: false };
             planetTextureCache[seed] = res;
             return res;
