@@ -238,9 +238,9 @@ HTML_CLIENT = """
         // ==============================================================================
         // PLANET CLUSTER SYSTEM MANAGER (NO MAN'S SKY STYLE)
         // ==============================================================================
-        const CLUSTER_GRID_SIZE = 150000;         // Distance between solar systems (~80k meters)
+        const CLUSTER_GRID_SIZE = 200000;        // Distance between solar systems (~200k meters)
         const CLUSTER_DRAW_RADIUS = 3;           // Render radius of system grids around player
-        const UNLOAD_DISTANCE_THRESHOLD = 300000; 
+        const UNLOAD_DISTANCE_THRESHOLD = 700000; 
         const planetObjects = {};
 
         const sharedSphereGeom = new THREE.SphereGeometry(1, 32, 32);
@@ -275,11 +275,11 @@ HTML_CLIENT = """
                 const angle = seededRandom(seed) * Math.PI * 2;
                 
                 seed += 101 + p * 50;
-                // Tight distance offset between grouped planets (15k - 30k meters apart)
-                const clusterOffsetDist = 15000 + seededRandom(seed) * 15000;
+                // Distance offset between grouped planets (40k - 80k meters apart)
+                const clusterOffsetDist = 40000 + seededRandom(seed) * 40000;
                 
                 seed += 102 + p * 50;
-                const altOffset = (seededRandom(seed) - 0.5) * 12000;
+                const altOffset = (seededRandom(seed) - 0.5) * 20000;
 
                 const px = systemCenterX + Math.cos(angle) * clusterOffsetDist;
                 const py = systemCenterY + Math.sin(angle) * clusterOffsetDist;
@@ -686,14 +686,14 @@ HTML_CLIENT = """
                 if (me.z === undefined || isNaN(me.z)) me.z = 0;
                 if (me.vz === undefined || isNaN(me.vz)) me.vz = 0;
 
-                const maxSpeed = 35;
+                const maxSpeed = 100;
                 const currentSpeed = Math.sqrt(me.vx * me.vx + me.vy * me.vy + me.vz * me.vz);
 
                 if (keys['ArrowLeft'] || keys['a'] || keys['A']) me.angle -= 0.03;
                 if (keys['ArrowRight'] || keys['d'] || keys['D']) me.angle += 0.03;
 
                 if (keys['ArrowUp'] || keys['w'] || keys['W']) {
-                    const baseAccel = 0.35;
+                    const baseAccel = 1.0;
                     const dragFactor = 0.013;
                     const effectiveThrust = baseAccel + (currentSpeed * dragFactor);
 
@@ -709,8 +709,8 @@ HTML_CLIENT = """
                     me.vz *= 0.90;
                 }
 
-                if (keys['x'] || keys['X']) me.vz += 0.45;
-                if (keys['z'] || keys['Z']) me.vz -= 0.45;
+                if (keys['x'] || keys['X']) me.vz += 0.85;
+                if (keys['z'] || keys['Z']) me.vz -= 0.85;
 
                 me.vx *= 0.987;
                 me.vy *= 0.987;
