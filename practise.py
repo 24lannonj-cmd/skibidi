@@ -5,7 +5,6 @@ app = FastAPI()
 
 @app.get("/", response_class=HTMLResponse)
 async def read_root():
-    # If serving directly from index.html:
     try:
         with open("index.html", "r", encoding="utf-8") as f:
             return f.read()
