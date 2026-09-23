@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-black text-zinc-100">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NOIR | Minimalist Digital Experience</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Inter and JetBrains Mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;600&family=JetBrains+Mono:wght@300;400&display=swap" rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        black: '#000000',
+                        dark: '#0a0a0a',
+                        card: '#121212',
+                        accent: '#ffffff',
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <style>
+        body {
+            background-color: #000000;
+            overflow-x: hidden;
+            font-family: 'Inter', sans-serif;
+        }
+        
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #000000;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #222222;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #444444;
+        }
+
+        /* Subtle Cursor Trail Container */
+        #canvas-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        /* Subtle interactive border glow */
+        .glow-card {
+            position: relative;
+            background: #0a0a0a;
+            transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .glow-card::before {
+            content: '';
+            position: absolute;
+            inset: -1px;
+            background: linear-gradient(135deg, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0) 60%);
+            border-radius: inherit;
+            z-index: -1;
+            opacity: 0.3;
+            transition: opacity 0.4s ease;
+        }
+        .glow-card:hover::before {
+            opacity: 1;
+        }
+        
+        .glass-nav {
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+    </style>
+</head>
+<body class="h-full text-zinc-300 selection:bg-zinc-800 selection:text-white relative">
+
+    <canvas id="canvas-bg"></canvas>
+
+    <nav class="fixed top-0 left-0 w-full z-50 glass-nav px-6 py-4 transition-all duration-300">
+        <div class="max-w-6xl mx-auto flex justify-between items-center">
+            <a href="#" class="font-mono text-sm tracking-widest text-white uppercase font-bold flex items-center gap-2 group">
+                <span class="w-2 h-2 rounded-full bg-white group-hover:scale-150 transition-transform duration-300"></span>
+                NOIR
+            </a>
+            
+            <div class="hidden md:flex items-center space-x-8 font-mono text-xs tracking-wider text-zinc-400">
+                <a href="#about" class="hover:text-white transition-colors duration-200">01. ABOUT</a>
+                <a href="#works" class="hover:text-white transition-colors duration-200">02. WORKS</a>
+                <a href="#services" class="hover:text-white transition-colors duration-200">03. SERVICES</a>
+                <a href="#contact" class="hover:text-white transition-colors duration-200">04. CONTACT</a>
+            </div>
+
+            <button id="menu-btn" class="md:hidden text-zinc-400 hover:text-white focus:outline-none">
+                <i class="fa-solid fa-bars text-lg"></i>
+            </button>
+        </div>
+        
+        <!-- Mobile Dropdown Menu -->
+        <div id="mobile-menu" class="hidden md:hidden pt-4 pb-2 px-2 flex flex-col space-y-3 font-mono text-xs text-zinc-400 border-t border-zinc-900 mt-4">
+            <a href="#about" class="hover:text-white transition-colors duration-200 py-1">01. ABOUT</a>
+            <a href="#works" class="hover:text-white transition-colors duration-200 py-1">02. WORKS</a>
+            <a href="#services" class="hover:text-white transition-colors duration-200 py-1">03. SERVICES</a>
+            <a href="#contact" class="hover:text-white transition-colors duration-200 py-1">04. CONTACT</a>
+        </div>
+    </nav>
+
+    <main class="relative z-10">
+        <section class="min-h-screen flex items-center justify-center px-6 pt-20">
+            <div class="max-w-4xl mx-auto text-center space-y-8">
+                <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-zinc-950 border border-zinc-800 font-mono text-xs text-zinc-400">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span>AVAILABLE FOR NEW PROJECTS</span>
+                </div>
+                
+                <h1 class="text-5xl sm:text-7xl md:text-8xl font-extralight tracking-tight text-white leading-none">
+                    Elegance in <br>
+                    <span class="font-normal italic font-serif opacity-90">Absolute Void.</span>
+                </h1>
+                
+                <p class="max-w-xl mx-auto font-light text-zinc-400 text-base sm:text-lg leading-relaxed">
+                    Crafting digital experiences stripped down to their pure essence. Focused on typography, interaction, and deep dark aesthetics.
+                </p>
+
+                <div class="pt-4 flex flex-col sm:flex-row items-center justify-center gap-4">
+                    <a href="#works" class="w-full sm:w-auto px-8 py-3.5 bg-white text-black font-medium text-sm rounded-full hover:bg-zinc-200 transition-all duration-300 shadow-lg shadow-white/5">
+                        Explore Work
+                    </a>
+                    <a href="#contact" class="w-full sm:w-auto px-8 py-3.5 bg-transparent border border-zinc-800 text-zinc-300 hover:text-white hover:border-zinc-500 font-medium text-sm rounded-full transition-all duration-300">
+                        Get In Touch
+                    </a>
+                </div>
+            </div>
+        </section>
+
+        <section id="works" class="py-24 px-6 border-t border-zinc-950">
+            <div class="max-w-6xl mx-auto space-y-12">
+                <div class="flex flex-col md:flex-row md:items-end justify-between gap-4">
+                    <div>
+                        <span class="font-mono text-xs text-zinc-500 uppercase tracking-widest">02 / Selected Works</span>
+                        <h2 class="text-3xl sm:text-4xl font-light text-white mt-1">Refined Digital Crafts</h2>
+                    </div>
+                    <p class="text-zinc-500 text-sm max-w-xs">A collection of minimalist web architecture and design artifacts.</p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <!-- Project Card 1 -->
+                    <div class="glow-card p-8 rounded-2xl border border-zinc-900/80 group">
+                        <div class="flex justify-between items-start mb-8">
+                            <span class="font-mono text-xs text-zinc-500">2026 — UI ARCHITECTURE</span>
+                            <a href="#" class="text-zinc-600 group-hover:text-white transition-colors duration-300"><i class="fa-solid fa-arrow-up-right text-lg"></i></a>
+                        </div>
+                        <h3 class="text-2xl font-light text-white mb-2 group-hover:translate-x-1 transition-transform duration-300">Monolith System</h3>
+                        <p class="text-zinc-400 text-sm font-light leading-relaxed mb-6">Ultra-fast web platform designed for maximum speed and zero visually distraction visual flow.</p>
+                        <div class="flex gap-2 font-mono text-[10px] text-zinc-500">
+                            <span class="px-2.5 py-1 rounded bg-zinc-900 border border-zinc-800">WebGL</span>
+                            <span class="px-2.5 py-1 rounded bg-zinc-900 border border-zinc-800">Tailwind</span>
+                            <span class="px-2.5 py-1 rounded bg-zinc-900 border border-zinc-800">Minimalism</span>
+                        </div>
+                    </div>
+
+                    <!-- Project Card 2 -->
+                    <div class="glow-card p-8 rounded-2xl border border-zinc-900/80 group">
+                        <div class="flex justify-between items-start mb-8">
+                            <span class="font-mono text-xs text-zinc-500">2026 — BRANDING</span>
+                            <a href="#" class="text-zinc-600 group-hover:text-white transition-colors duration-300"><i class="fa-solid fa-arrow-up-right text-lg"></i></a>
+                        </div>
+                        <h3 class="text-2xl font-light text-white mb-2 group-hover:translate-x-1 transition-transform duration-300">Aether Audio</h3>
+                        <p class="text-zinc-400 text-sm font-light leading-relaxed mb-6">Generative sound generator app designed in pure pitch black for focus and audio immersion.</p>
+                        <div class="flex gap-2 font-mono text-[10px] text-zinc-500">
+                            <span class="px-2.5 py-1 rounded bg-zinc-900 border border-zinc-800">Web Audio API</span>
+                            <span class="px-2.5 py-1 rounded bg-zinc-900 border border-zinc-800">React</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="services" class="py-24 px-6 border-t border-zinc-950 bg-black">
+            <div class="max-w-6xl mx-auto space-y-12">
+                <div class="max-w-md">
+                    <span class="font-mono text-xs text-zinc-500 uppercase tracking-widest">03 / Principles</span>
+                    <h2 class="text-3xl sm:text-4xl font-light text-white mt-1">Built for Clarity</h2>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                    <div class="space-y-4">
+                        <div class="w-10 h-10 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center text-white font-mono text-sm">
+                            01
+                        </div>
+                        <h3 class="text-lg font-normal text-white">Pure Contrast</h3>
+                        <p class="text-sm text-zinc-400 font-light leading-relaxed">
+                            Deep OLED blacks (#000000) coupled with high-contrast typography to maximize readability and reduce visual fatigue.
+                        </p>
+                    </div>
+
+                    <div class="space-y-4">
+                        <div class="w-10 h-10 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center text-white font-mono text-sm">
+                            02
+                        </div>
+                        <h3 class="text-lg font-normal text-white">Interactive Dynamics</h3>
+                        <p class="text-sm text-zinc-400 font-light leading-relaxed">
+                            Fluid canvas particles and responsive lighting effects that react to subtle mouse movements and touches.
+                        </p>
+                    </div>
+
+                    <div class="space-y-4">
+                        <div class="w-10 h-10 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center text-white font-mono text-sm">
+                            03
+                        </div>
+                        <h3 class="text-lg font-normal text-white">Extreme Performance</h3>
+                        <p class="text-sm text-zinc-400 font-light leading-relaxed">
+                            Zero heavy assets or bloated frameworks. Lightweight layout built with modern CSS and vanilla JS canvas.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="contact" class="py-24 px-6 border-t border-zinc-950">
+            <div class="max-w-4xl mx-auto text-center space-y-8">
+                <span class="font-mono text-xs text-zinc-500 uppercase tracking-widest">04 / Get In Touch</span>
+                <h2 class="text-4xl sm:text-6xl font-light text-white">Let’s build something <br><span class="italic font-serif">extraordinary.</span></h2>
+                
+                <p class="text-zinc-400 text-sm max-w-md mx-auto font-light">
+                    Have a project in mind or just want to discuss minimalist design and architecture?
+                </p>
+
+                <div class="pt-4">
+                    <button onclick="copyEmail(this)" class="inline-flex items-center gap-3 px-6 py-3 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-200 hover:border-zinc-600 hover:text-white transition-all duration-300 font-mono text-xs">
+                        <i class="fa-regular fa-envelope"></i>
+                        <span>hello@noir-studio.dev</span>
+                        <span id="copy-badge" class="ml-2 text-[10px] text-zinc-500">(Click to copy)</span>
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <footer class="py-8 px-6 border-t border-zinc-950 text-center font-mono text-xs text-zinc-600">
+            <div class="max-w-6xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
+                <p>© 2026 NOIR. Pure Black Aesthetic.</p>
+                <div class="flex space-x-6 text-zinc-500">
+                    <a href="#" class="hover:text-white transition-colors">GitHub</a>
+                    <a href="#" class="hover:text-white transition-colors">Twitter / X</a>
+                    <a href="#" class="hover:text-white transition-colors">LinkedIn</a>
+                </div>
+            </div>
+        </footer>
+    </main>
+
+    <script>
+        // Mobile menu toggle
+        const menuBtn = document.getElementById('menu-btn');
+        const mobileMenu = document.getElementById('mobile-menu');
+
+        menuBtn.addEventListener('click', () => {
+            mobileMenu.classList.toggle('hidden');
+        });
+
+        // Copy Email logic
+        function copyEmail(button) {
+            const email = 'hello@noir-studio.dev';
+            const tempInput = document.createElement('input');
+            tempInput.value = email;
+            document.body.appendChild(tempInput);
+            tempInput.select();
+            document.execCommand('copy');
+            document.body.removeChild(tempInput);
+
+            const badge = document.getElementById('copy-badge');
+            badge.textContent = '(Copied!)';
+            badge.classList.add('text-emerald-400');
+            setTimeout(() => {
+                badge.textContent = '(Click to copy)';
+                badge.classList.remove('text-emerald-400');
+            }, 2000);
+        }
+
+        // Ambient Dark Particle System
+        const canvas = document.getElementById('canvas-bg');
+        const ctx = canvas.getContext('2d');
+
+        let width, height;
+        let particles = [];
+        let mouse = { x: null, y: null, radius: 150 };
+
+        function resize() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+        }
+
+        window.addEventListener('resize', resize);
+        resize();
+
+        window.addEventListener('mousemove', (e) => {
+            mouse.x = e.clientX;
+            mouse.y = e.clientY;
+        });
+
+        window.addEventListener('mouseleave', () => {
+            mouse.x = null;
+            mouse.y = null;
+        });
+
+        class Particle {
+            constructor() {
+                this.x = Math.random() * width;
+                this.y = Math.random() * height;
+                this.size = Math.random() * 1.5 + 0.5;
+                this.baseX = this.x;
+                this.baseY = this.y;
+                this.vx = (Math.random() - 0.5) * 0.3;
+                this.vy = (Math.random() - 0.5) * 0.3;
+                this.alpha = Math.random() * 0.4 + 0.1;
+            }
+
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+
+                if (this.x < 0 || this.x > width) this.vx *= -1;
+                if (this.y < 0 || this.y > height) this.vy *= -1;
+
+                // Mouse interaction glow
+                if (mouse.x && mouse.y) {
+                    let dx = mouse.x - this.x;
+                    let dy = mouse.y - this.y;
+                    let distance = Math.sqrt(dx * dx + dy * dy);
+                    if (distance < mouse.radius) {
+                        const force = (mouse.radius - distance) / mouse.radius;
+                        this.x -= (dx / distance) * force * 2;
+                        this.y -= (dy / distance) * force * 2;
+                    }
+                }
+            }
+
+            draw() {
+                ctx.fillStyle = `rgba(255, 255, 255, ${this.alpha})`;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        function initParticles() {
+            particles = [];
+            const particleCount = Math.floor((width * height) / 12000);
+            for (let i = 0; i < particleCount; i++) {
+                particles.push(new Particle());
+            }
+        }
+
+        function animate() {
+            ctx.clearRect(0, 0, width, height);
+
+            // Subtle glow around mouse cursor
+            if (mouse.x && mouse.y) {
+                const gradient = ctx.createRadialGradient(
+                    mouse.x, mouse.y, 0,
+                    mouse.x, mouse.y, 250
+                );
+                gradient.addColorStop(0, 'rgba(255, 255, 255, 0.03)');
+                gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+                ctx.fillStyle = gradient;
+                ctx.fillRect(0, 0, width, height);
+            }
+
+            particles.forEach((particle) => {
+                particle.update();
+                particle.draw();
+            });
+
+            requestAnimationFrame(animate);
+        }
+
+        window.onload = function() {
+            initParticles();
+            animate();
+        };
+    </script>
+</body>
+</html>
