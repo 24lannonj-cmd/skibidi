@@ -670,39 +670,42 @@ HTML_CLIENT = """
         function updateLocalPhysics() {
             if (localPlayerId && gameState.players[localPlayerId]) {
                 const me = gameState.players[localPlayerId];
-               // 1. Apply movement/thrust (e.g., when holding W)
-                const isAccelerating = keys['ArrowUp'] || keys['w'] || keys['W'];
-                if (isAccelerating) {
-                    const thrust = 0.5;
+               // 1. Determine key states
+                const isThrusting = keys['ArrowUp'] || keys['w'] || keys['W'];
+                const isBoosting = keys['Shift'];
+                
+                // 2. Base max speed depending on Shift
+                const maxSpeed = isBoosting ? 100 : 50;
+                
+                // 3. Apply acceleration ONLY if you are below the target speed limit
+                if (isThrusting) {
+                    // Variable thrust force based on boost
+                    const thrust = isBoosting ? 0.8 : 0.4;
                     me.vx += Math.sin(me.angle) * thrust;
                     me.vy -= Math.cos(me.angle) * thrust;
                 }
                 
-                // 2. Determine speed limit based on Shift
-                const maxSpeed = keys['Shift'] ? 100 : 50;
-                
-                // 3. Calculate current speed
+                // 4. Calculate current speed after thrusting
                 let currentSpeed = Math.sqrt(me.vx * me.vx + me.vy * me.vy + me.vz * me.vz);
                 
-                // 4. Handle speed capping / smooth decay
+                // 5. Handle speed limits and smooth decay
                 if (currentSpeed > maxSpeed) {
-                    if (isAccelerating) {
-                        // If holding thrust, hard-lock EXACTLY to maxSpeed (no flicker above 100)
+                    if (isBoosting && isThrusting) {
+                        // While actively boosting (Shift + W), hard lock to 100 to stop HUD flicker
                         const scale = maxSpeed / currentSpeed;
                         me.vx *= scale;
                         me.vy *= scale;
                         me.vz *= scale;
-                        currentSpeed = maxSpeed; // Lock the value for display HUD
                     } else {
-                        // If coasting (let go of boost/thrust), bleed off excess speed smoothly
-                        const decayRate = 0.95;
+                        // When releasing Shift (even if still holding W), smoothly bleed off speed down to 50
+                        const decayRate = 0.96; // 0.96 gives a nice smooth 1-2 second glide
                         me.vx *= decayRate;
                         me.vy *= decayRate;
                         me.vz *= decayRate;
                     }
                 }
                 
-                // 5. Update position
+                // 6. Update position
                 me.x += me.vx;
                 me.y += me.vy;
                 me.z += me.vz;
