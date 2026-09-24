@@ -685,6 +685,7 @@ HTML_CLIENT = """
                     let baseAccel = 1.0;
                     const dragFactor = 0.013;
                     const effectiveThrust = baseAccel + (currentSpeed * dragFactor);
+                    }
                     else {
                     let baseAccel = 0.3
                     const dragFactor = 0.013;
@@ -693,7 +694,6 @@ HTML_CLIENT = """
                     me.vy -= Math.cos(me.angle) * effectiveThrust;
 
                     spawnTrailParticle(me.x, me.y, me.z, me.angle);
-                    }
                     }
                 }
                 if (keys['ArrowDown'] || keys['s'] || keys['S']) {
