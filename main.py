@@ -674,10 +674,10 @@ HTML_CLIENT = """
                 if (me.z === undefined || isNaN(me.z)) me.z = 0;
                 if (me.vz === undefined || isNaN(me.vz)) me.vz = 0;
                 if (keys['Shift']) {
-                const maxSpeed = 100;
+                maxSpeed = 100;
                 }
                 else {
-                const maxSpeed = 50;
+                maxSpeed = 50;
                 }
                 const currentSpeed = Math.sqrt(me.vx * me.vx + me.vy * me.vy + me.vz * me.vz);
 
