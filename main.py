@@ -673,18 +673,24 @@ HTML_CLIENT = """
                 let maxSpeed;
                 if (me.z === undefined || isNaN(me.z)) me.z = 0;
                 if (me.vz === undefined || isNaN(me.vz)) me.vz = 0;
-                if (keys['Shift']) {
-                maxSpeed = 100;
-                }
-                else {
-                maxSpeed = 50;
-                }
-                const currentSpeed = Math.sqrt(me.vx * me.vx + me.vy * me.vy + me.vz * me.vz);
+               // 1. Determine speed limit based on Shift
+                const maxSpeed = keys['Shift'] ? 100 : 50;
+                
+                // 2. Calculate current overall speed
+                let currentSpeed = Math.sqrt(me.vx * me.vx + me.vy * me.vy + me.vz * me.vz);
+                
+                // 3. Hard cap the velocity vectors directly
                 if (currentSpeed > maxSpeed) {
-                    // Reduce actual movement velocity by 10%
-                    me.vx *= 0.9;
-                    me.vy *= 0.9;
-                    me.vz *= 0.9;
+                    const scaleFactor = maxSpeed / currentSpeed;
+                    me.vx *= scaleFactor;
+                    me.vy *= scaleFactor;
+                    me.vz *= scaleFactor;
+                }
+                
+                // 4. Update actual position
+                me.x += me.vx;
+                me.y += me.vy;
+                me.z += me.vz;
                 if (keys['ArrowLeft'] || keys['a'] || keys['A']) me.angle -= 0.03;
                 if (keys['ArrowRight'] || keys['d'] || keys['D']) me.angle += 0.03;
 
