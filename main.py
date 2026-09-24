@@ -680,9 +680,11 @@ HTML_CLIENT = """
                 maxSpeed = 50;
                 }
                 const currentSpeed = Math.sqrt(me.vx * me.vx + me.vy * me.vy + me.vz * me.vz);
-                if maxSpeed > currentSpeed {
-                currentSpeed = currentSpeed * 0.9;
-                }
+                if (currentSpeed > maxSpeed) {
+                    // Reduce actual movement velocity by 10%
+                    me.vx *= 0.9;
+                    me.vy *= 0.9;
+                    me.vz *= 0.9;
                 if (keys['ArrowLeft'] || keys['a'] || keys['A']) me.angle -= 0.03;
                 if (keys['ArrowRight'] || keys['d'] || keys['D']) me.angle += 0.03;
 
