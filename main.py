@@ -75,6 +75,7 @@ HTML_CLIENT = """
         <p>Active Planets: <span id="planet-count" class="stat">0</span></p>
         <p>Nearest Planet: <span id="nearest-dist" class="stat">N/A</span></p>
         <p>Controls: WASD (Forward/Turn), X/Z (Ascend/Descend)</p>
+        <p>Shift to boost</p>
     </div>
 
     <div id="nav-arrow"></div>
@@ -727,7 +728,7 @@ HTML_CLIENT = """
                         me.vz *= scale;
                     } else {
                         // Smoothly bleed off excess speed down to 50 over ~1.5 seconds when releasing Shift
-                        const decayRate = 0.96;
+                        const decayRate = 0.85;
                         me.vx *= decayRate;
                         me.vy *= decayRate;
                         me.vz *= decayRate;
