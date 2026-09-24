@@ -670,16 +670,17 @@ HTML_CLIENT = """
         function updateLocalPhysics() {
             if (localPlayerId && gameState.players[localPlayerId]) {
                 const me = gameState.players[localPlayerId];
-                let maxSpeed;
+                // 1. Ensure position & velocity variables exist
                 if (me.z === undefined || isNaN(me.z)) me.z = 0;
                 if (me.vz === undefined || isNaN(me.vz)) me.vz = 0;
-               // 1. Determine speed limit based on Shift
+                
+                // 2. Determine speed limit based on Shift key
                 const maxSpeed = keys['Shift'] ? 100 : 50;
                 
-                // 2. Calculate current overall speed
+                // 3. Calculate current overall speed
                 let currentSpeed = Math.sqrt(me.vx * me.vx + me.vy * me.vy + me.vz * me.vz);
                 
-                // 3. Hard cap the velocity vectors directly
+                // 4. Hard cap the velocity vectors directly if over max speed
                 if (currentSpeed > maxSpeed) {
                     const scaleFactor = maxSpeed / currentSpeed;
                     me.vx *= scaleFactor;
@@ -687,7 +688,7 @@ HTML_CLIENT = """
                     me.vz *= scaleFactor;
                 }
                 
-                // 4. Update actual position
+                // 5. Update actual position
                 me.x += me.vx;
                 me.y += me.vy;
                 me.z += me.vz;
