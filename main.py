@@ -681,20 +681,24 @@ HTML_CLIENT = """
                 if (keys['ArrowRight'] || keys['d'] || keys['D']) me.angle += 0.03;
 
                 if (keys['ArrowUp'] || keys['w'] || keys['W']) {
+                    let baseAccel;
+                
+                    // Check if Shift is held to determine acceleration
                     if (keys['Shift']) {
-                    let baseAccel = 1.0;
-                    const dragFactor = 0.013;
-                    const effectiveThrust = baseAccel + (currentSpeed * dragFactor);
+                        baseAccel = 1.0; // Boost speed
+                    } else {
+                        baseAccel = 0.3; // Normal speed
                     }
-                    else {
-                    let baseAccel = 0.3
+                
                     const dragFactor = 0.013;
                     const effectiveThrust = baseAccel + (currentSpeed * dragFactor);
+                
+                    // Apply movement physics to ship
                     me.vx += Math.sin(me.angle) * effectiveThrust;
                     me.vy -= Math.cos(me.angle) * effectiveThrust;
-
+                
+                    // Spawn engine particles
                     spawnTrailParticle(me.x, me.y, me.z, me.angle);
-                    }
                 }
                 if (keys['ArrowDown'] || keys['s'] || keys['S']) {
                     me.vx *= 0.90;
