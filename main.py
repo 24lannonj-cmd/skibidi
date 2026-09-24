@@ -681,7 +681,7 @@ HTML_CLIENT = """
                 if (keys['ArrowRight'] || keys['d'] || keys['D']) me.angle += 0.03;
 
                 if (keys['ArrowUp'] || keys['w'] || keys['W']) {
-                    if (keys['Shift'] {
+                    if (keys['Shift']) {
                     const baseAccel = 1.0;
                     const dragFactor = 0.013;
                     const effectiveThrust = baseAccel + (currentSpeed * dragFactor);
@@ -690,8 +690,8 @@ HTML_CLIENT = """
                     me.vy -= Math.cos(me.angle) * effectiveThrust;
 
                     spawnTrailParticle(me.x, me.y, me.z, me.angle);
+                    }
                 }
-
                 if (keys['ArrowDown'] || keys['s'] || keys['S']) {
                     me.vx *= 0.90;
                     me.vy *= 0.90;
