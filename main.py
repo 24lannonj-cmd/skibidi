@@ -670,25 +670,33 @@ HTML_CLIENT = """
         function updateLocalPhysics() {
             if (localPlayerId && gameState.players[localPlayerId]) {
                 const me = gameState.players[localPlayerId];
-                // 1. Ensure position & velocity variables exist
-                if (me.z === undefined || isNaN(me.z)) me.z = 0;
-                if (me.vz === undefined || isNaN(me.vz)) me.vz = 0;
+               // 1. Ensure ALL velocity variables exist and are numbers
+                if (!me.vx || isNaN(me.vx)) me.vx = 0;
+                if (!me.vy || isNaN(me.vy)) me.vy = 0;
+                if (!me.vz || isNaN(me.vz)) me.vz = 0;
                 
-                // 2. Determine speed limit based on Shift key
-                const maxSpeed = keys['Shift'] ? 100 : 50;
-                
-                // 3. Calculate current overall speed
-                let currentSpeed = Math.sqrt(me.vx * me.vx + me.vy * me.vy + me.vz * me.vz);
-                
-                // 4. Hard cap the velocity vectors directly if over max speed
-                if (currentSpeed > maxSpeed) {
-                    const scaleFactor = maxSpeed / currentSpeed;
-                    me.vx *= 0.9;
-                    me.vy *= 0.9;
-                    me.vz *= 0.9;
+                // 2. APPLY MOVEMENT/THRUST HERE FIRST (e.g., when pressing W/Up)
+                if (keys['ArrowUp'] || keys['w'] || keys['W']) {
+                    const thrust = 0.5;
+                    me.vx += Math.sin(me.angle) * thrust;
+                    me.vy -= Math.cos(me.angle) * thrust;
                 }
                 
-                // 5. Update actual position
+                // 3. Determine speed limit based on Shift key
+                const maxSpeed = keys['Shift'] ? 100 : 50;
+                
+                // 4. Calculate current speed
+                let currentSpeed = Math.sqrt(me.vx * me.vx + me.vy * me.vy + me.vz * me.vz);
+                
+                // 5. Cap the speed ONLY if current speed actually exceeds maxSpeed
+                if (currentSpeed > maxSpeed) {
+                    const scaleFactor = maxSpeed / currentSpeed;
+                    me.vx *= scaleFactor;
+                    me.vy *= scaleFactor;
+                    me.vz *= scaleFactor;
+                }
+                
+                // 6. Update position
                 me.x += me.vx;
                 me.y += me.vy;
                 me.z += me.vz;
