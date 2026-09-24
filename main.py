@@ -728,7 +728,7 @@ HTML_CLIENT = """
                         me.vz *= scale;
                     } else {
                         // Smoothly bleed off excess speed down to 50 over ~1.5 seconds when releasing Shift
-                        const decayRate = 0.85;
+                        const decayRate = 0.99;
                         me.vx *= decayRate;
                         me.vy *= decayRate;
                         me.vz *= decayRate;
