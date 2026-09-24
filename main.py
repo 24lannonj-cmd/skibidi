@@ -680,7 +680,9 @@ HTML_CLIENT = """
                 maxSpeed = 50;
                 }
                 const currentSpeed = Math.sqrt(me.vx * me.vx + me.vy * me.vy + me.vz * me.vz);
-
+                if maxSpeed > currentSpeed {
+                currentSpeed * 0.9;
+                }
                 if (keys['ArrowLeft'] || keys['a'] || keys['A']) me.angle -= 0.03;
                 if (keys['ArrowRight'] || keys['d'] || keys['D']) me.angle += 0.03;
 
