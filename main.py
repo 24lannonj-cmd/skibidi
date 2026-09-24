@@ -663,127 +663,117 @@ HTML_CLIENT = """
                 document.getElementById('player-count').innerText = Object.keys(data.gameState.players).length;
             }
         };
-
-        // ==============================================================================
-        // MOVEMENT & PHYSICS
-        // ==============================================================================
+        // =========================================
+        // PHYSICS
+        // ========================================
         function updateLocalPhysics() {
             if (localPlayerId && gameState.players[localPlayerId]) {
                 const me = gameState.players[localPlayerId];
-               // 1. Sanitize velocity vectors to prevent NaN bugs
+                
+                // 1. Sanitize velocity vectors
                 if (!me.vx || isNaN(me.vx)) me.vx = 0;
                 if (!me.vy || isNaN(me.vy)) me.vy = 0;
                 if (!me.vz || isNaN(me.vz)) me.vz = 0;
                 
-                // 2. Read control inputs
+                // 2. Read inputs
                 const isThrusting = keys['ArrowUp'] || keys['w'] || keys['W'];
                 const isBoosting = keys['Shift'];
                 
-                // 3. Define target max speed ceiling
-                const maxSpeed = isBoosting ? 100 : 50;
-                
-                // 4. Calculate current speed BEFORE adding frame thrust
-                let currentSpeed = Math.sqrt(me.vx * me.vx + me.vy * me.vy + me.vz * me.vz);
-                
-                // 5. Apply movement thrust ONLY if we haven't reached the current speed limit
-                if (isThrusting && currentSpeed < maxSpeed) {
-                    const thrust = isBoosting ? 0.8 : 0.4;
-                    me.vx += Math.sin(me.angle) * thrust;
-                    me.vy -= Math.cos(me.angle) * thrust;
-                    
-                    // Recalculate speed after applying frame thrust
-                    currentSpeed = Math.sqrt(me.vx * me.vx + me.vy * me.vy + me.vz * me.vz);
-                }
-                
-                // 6. Velocity Clamping & Smooth Decay
-                if (currentSpeed > maxSpeed) {
-                    if (isBoosting) {
-                        // Hard-lock precisely at 100 while holding Shift so HUD never reads 100.1 / 99.9
-                        const scale = maxSpeed / currentSpeed;
-                        me.vx *= scale;
-                        me.vy *= scale;
-                        me.vz *= scale;
-                    } else {
-                        // Bleed off excess speed smoothly down to 50 over ~1 second
-                        const decayRate = 0.96;
-                        me.vx *= decayRate;
-                        me.vy *= decayRate;
-                        me.vz *= decayRate;
-                    }
-                } else if (isThrusting && currentSpeed > (maxSpeed - 0.5) && !isBoosting) {
-                    // Lock EXACTLY to 50.0 when cruising at top non-boost speed (eliminates the 50 m/s flicker)
-                    const scale = 50 / currentSpeed;
-                    me.vx *= scale;
-                    me.vy *= scale;
-                    me.vz *= scale;
-                }
-                
-                // 7. Update final position
-                me.x += me.vx;
-                me.y += me.vy;
-                me.z += me.vz;
+                // Steering
                 if (keys['ArrowLeft'] || keys['a'] || keys['A']) me.angle -= 0.03;
                 if (keys['ArrowRight'] || keys['d'] || keys['D']) me.angle += 0.03;
-
-                if (keys['ArrowUp'] || keys['w'] || keys['W']) {
-                    let baseAccel;
                 
-                    // Check if Shift is held to determine acceleration
-                    if (keys['Shift']) {
-                        baseAccel = 1.0; // Boost speed
-                    } else {
-                        baseAccel = 0.15; // Normal speed
-                    }
+                // Vertical movement controls (Z-axis)
+                if (keys['x'] || keys['X']) me.vz += 0.85;
+                if (keys['z'] || keys['Z']) me.vz -= 0.85;
                 
-                    const dragFactor = 0.013;
-                    const effectiveThrust = baseAccel + (currentSpeed * dragFactor);
-                
-                    // Apply movement physics to ship
-                    me.vx += Math.sin(me.angle) * effectiveThrust;
-                    me.vy -= Math.cos(me.angle) * effectiveThrust;
-                
-                    // Spawn engine particles
-                    spawnTrailParticle(me.x, me.y, me.z, me.angle);
-                }
+                // Reverse / Braking key (S)
                 if (keys['ArrowDown'] || keys['s'] || keys['S']) {
                     me.vx *= 0.90;
                     me.vy *= 0.90;
                     me.vz *= 0.90;
                 }
-
-                if (keys['x'] || keys['X']) me.vz += 0.85;
-                if (keys['z'] || keys['Z']) me.vz -= 0.85;
-
-                me.vx *= 0.987;
-                me.vy *= 0.987;
-                me.vz *= 0.950;
-
-
-
+        
+                // 3. Speed Caps & Dynamic Acceleration
+                const maxSpeed = isBoosting ? 100 : 50;
+                let currentSpeed = Math.sqrt(me.vx * me.vx + me.vy * me.vy + me.vz * me.vz);
+        
+                // Apply forward engine thrust
+                if (isThrusting) {
+                    // Apply thrust only if we aren't exceeding target speed limit
+                    if (currentSpeed < maxSpeed) {
+                        const baseAccel = isBoosting ? 1.0 : 0.3;
+                        const dragFactor = 0.013;
+                        const effectiveThrust = baseAccel + (currentSpeed * dragFactor);
+                        
+                        me.vx += Math.sin(me.angle) * effectiveThrust;
+                        me.vy -= Math.cos(me.angle) * effectiveThrust;
+                        
+                        // Spawn engine particles while accelerating
+                        spawnTrailParticle(me.x, me.y, me.z, me.angle);
+                    }
+                    
+                    // Recalculate speed after thrusting
+                    currentSpeed = Math.sqrt(me.vx * me.vx + me.vy * me.vy + me.vz * me.vz);
+                }
+        
+                // 4. Clamping & Decay Management
+                if (currentSpeed > maxSpeed) {
+                    if (isBoosting) {
+                        // Lock strictly at 100 m/s when holding Shift + W
+                        const scale = maxSpeed / currentSpeed;
+                        me.vx *= scale;
+                        me.vy *= scale;
+                        me.vz *= scale;
+                    } else {
+                        // Smoothly bleed off excess speed down to 50 over ~1.5 seconds when releasing Shift
+                        const decayRate = 0.96;
+                        me.vx *= decayRate;
+                        me.vy *= decayRate;
+                        me.vz *= decayRate;
+                    }
+                } else if (isThrusting && !isBoosting && currentSpeed > 49.0) {
+                    // Hard lock to EXACTLY 50.0 when cruising at top non-boost speed (stops HUD flicker)
+                    const scale = 50 / currentSpeed;
+                    me.vx *= scale;
+                    me.vy *= scale;
+                    me.vz *= scale;
+                } else if (!isThrusting) {
+                    // Standard space friction (only applies when coasting / not holding thrust)
+                    me.vx *= 0.987;
+                    me.vy *= 0.987;
+                    me.vz *= 0.950;
+                }
+        
+                // 5. Update Position
+                me.x += me.vx;
+                me.y += me.vy;
+                me.z += me.vz;
+        
+                // 6. Planetary Collision Resolution
                 const shipRadius = 12;
                 for (let key in planetObjects) {
                     const planet = planetObjects[key];
                     if (!planet) continue;
-
+        
                     const dx = me.x - planet.x;
                     const dy = me.z - planet.z; 
                     const dz = me.y - planet.y;
                     const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-
                     const minDist = planet.radius + shipRadius;
-
+        
                     if (dist < minDist && dist > 0) {
                         const nx = dx / dist;
                         const ny = dz / dist; 
                         const nz = dy / dist;
-
+        
                         const overlap = minDist - dist;
                         me.x += nx * overlap;
                         me.z += ny * overlap;
                         me.y += nz * overlap;
-
+        
                         const dotProduct = me.vx * nx + me.vz * ny + me.vy * nz;
-
+        
                         if (dotProduct < 0) {
                             me.vx = (me.vx - 2 * dotProduct * nx) * 0.6;
                             me.vz = (me.vz - 2 * dotProduct * ny) * 0.6;
@@ -792,7 +782,8 @@ HTML_CLIENT = """
                         }
                     }
                 }
-
+        
+                // 7. Sync over WebSocket
                 if (ws.readyState === WebSocket.OPEN) {
                     ws.send(JSON.stringify({ 
                         type: 'sync', x: me.x, y: me.y, z: me.z, angle: me.angle, vx: me.vx, vy: me.vy, vz: me.vz 
