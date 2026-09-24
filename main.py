@@ -673,8 +673,12 @@ HTML_CLIENT = """
 
                 if (me.z === undefined || isNaN(me.z)) me.z = 0;
                 if (me.vz === undefined || isNaN(me.vz)) me.vz = 0;
-
+                if (keys['Shift']) {
                 const maxSpeed = 100;
+                }
+                else {
+                const maxSpeed = 50;
+                }
                 const currentSpeed = Math.sqrt(me.vx * me.vx + me.vy * me.vy + me.vz * me.vz);
 
                 if (keys['ArrowLeft'] || keys['a'] || keys['A']) me.angle -= 0.03;
@@ -687,7 +691,7 @@ HTML_CLIENT = """
                     if (keys['Shift']) {
                         baseAccel = 1.0; // Boost speed
                     } else {
-                        baseAccel = 0.3; // Normal speed
+                        baseAccel = 0.15; // Normal speed
                     }
                 
                     const dragFactor = 0.013;
