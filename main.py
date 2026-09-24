@@ -670,42 +670,55 @@ HTML_CLIENT = """
         function updateLocalPhysics() {
             if (localPlayerId && gameState.players[localPlayerId]) {
                 const me = gameState.players[localPlayerId];
-               // 1. Determine key states
+               // 1. Sanitize velocity vectors to prevent NaN bugs
+                if (!me.vx || isNaN(me.vx)) me.vx = 0;
+                if (!me.vy || isNaN(me.vy)) me.vy = 0;
+                if (!me.vz || isNaN(me.vz)) me.vz = 0;
+                
+                // 2. Read control inputs
                 const isThrusting = keys['ArrowUp'] || keys['w'] || keys['W'];
                 const isBoosting = keys['Shift'];
                 
-                // 2. Base max speed depending on Shift
+                // 3. Define target max speed ceiling
                 const maxSpeed = isBoosting ? 100 : 50;
                 
-                // 3. Apply acceleration ONLY if you are below the target speed limit
-                if (isThrusting) {
-                    // Variable thrust force based on boost
+                // 4. Calculate current speed BEFORE adding frame thrust
+                let currentSpeed = Math.sqrt(me.vx * me.vx + me.vy * me.vy + me.vz * me.vz);
+                
+                // 5. Apply movement thrust ONLY if we haven't reached the current speed limit
+                if (isThrusting && currentSpeed < maxSpeed) {
                     const thrust = isBoosting ? 0.8 : 0.4;
                     me.vx += Math.sin(me.angle) * thrust;
                     me.vy -= Math.cos(me.angle) * thrust;
+                    
+                    // Recalculate speed after applying frame thrust
+                    currentSpeed = Math.sqrt(me.vx * me.vx + me.vy * me.vy + me.vz * me.vz);
                 }
                 
-                // 4. Calculate current speed after thrusting
-                let currentSpeed = Math.sqrt(me.vx * me.vx + me.vy * me.vy + me.vz * me.vz);
-                
-                // 5. Handle speed limits and smooth decay
+                // 6. Velocity Clamping & Smooth Decay
                 if (currentSpeed > maxSpeed) {
-                    if (isBoosting && isThrusting) {
-                        // While actively boosting (Shift + W), hard lock to 100 to stop HUD flicker
+                    if (isBoosting) {
+                        // Hard-lock precisely at 100 while holding Shift so HUD never reads 100.1 / 99.9
                         const scale = maxSpeed / currentSpeed;
                         me.vx *= scale;
                         me.vy *= scale;
                         me.vz *= scale;
                     } else {
-                        // When releasing Shift (even if still holding W), smoothly bleed off speed down to 50
-                        const decayRate = 0.96; // 0.96 gives a nice smooth 1-2 second glide
+                        // Bleed off excess speed smoothly down to 50 over ~1 second
+                        const decayRate = 0.96;
                         me.vx *= decayRate;
                         me.vy *= decayRate;
                         me.vz *= decayRate;
                     }
+                } else if (isThrusting && currentSpeed > (maxSpeed - 0.5) && !isBoosting) {
+                    // Lock EXACTLY to 50.0 when cruising at top non-boost speed (eliminates the 50 m/s flicker)
+                    const scale = 50 / currentSpeed;
+                    me.vx *= scale;
+                    me.vy *= scale;
+                    me.vz *= scale;
                 }
                 
-                // 6. Update position
+                // 7. Update final position
                 me.x += me.vx;
                 me.y += me.vy;
                 me.z += me.vz;
