@@ -683,9 +683,9 @@ HTML_CLIENT = """
                 // 4. Hard cap the velocity vectors directly if over max speed
                 if (currentSpeed > maxSpeed) {
                     const scaleFactor = maxSpeed / currentSpeed;
-                    me.vx *= scaleFactor;
-                    me.vy *= scaleFactor;
-                    me.vz *= scaleFactor;
+                    me.vx *= 0.9;
+                    me.vy *= 0.9;
+                    me.vz *= 0.9;
                 }
                 
                 // 5. Update actual position
