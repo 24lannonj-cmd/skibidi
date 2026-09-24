@@ -683,7 +683,7 @@ HTML_CLIENT = """
                 }
                 
                 // 3. Determine speed limit based on Shift
-                const maxSpeed = keys['Shift'] ? 100 : 50;
+                const maxSpeed = keys['Shift'] ? 105 : 55;
                 
                 // 4. Calculate current speed
                 let currentSpeed = Math.sqrt(me.vx * me.vx + me.vy * me.vy + me.vz * me.vz);
