@@ -682,14 +682,18 @@ HTML_CLIENT = """
 
                 if (keys['ArrowUp'] || keys['w'] || keys['W']) {
                     if (keys['Shift']) {
-                    const baseAccel = 1.0;
+                    let baseAccel = 1.0;
                     const dragFactor = 0.013;
                     const effectiveThrust = baseAccel + (currentSpeed * dragFactor);
-
+                    else {
+                    let baseAccel = 0.3
+                    const dragFactor = 0.013;
+                    const effectiveThrust = baseAccel + (currentSpeed * dragFactor);
                     me.vx += Math.sin(me.angle) * effectiveThrust;
                     me.vy -= Math.cos(me.angle) * effectiveThrust;
 
                     spawnTrailParticle(me.x, me.y, me.z, me.angle);
+                    }
                     }
                 }
                 if (keys['ArrowDown'] || keys['s'] || keys['S']) {
