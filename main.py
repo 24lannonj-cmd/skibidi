@@ -670,30 +670,31 @@ HTML_CLIENT = """
         function updateLocalPhysics() {
             if (localPlayerId && gameState.players[localPlayerId]) {
                 const me = gameState.players[localPlayerId];
-               // 1. Ensure ALL velocity variables exist and are numbers
+               // 1. Ensure velocity variables exist and are valid numbers
                 if (!me.vx || isNaN(me.vx)) me.vx = 0;
                 if (!me.vy || isNaN(me.vy)) me.vy = 0;
                 if (!me.vz || isNaN(me.vz)) me.vz = 0;
                 
-                // 2. APPLY MOVEMENT/THRUST HERE FIRST (e.g., when pressing W/Up)
+                // 2. Apply movement/thrust (e.g., when holding W)
                 if (keys['ArrowUp'] || keys['w'] || keys['W']) {
                     const thrust = 0.5;
                     me.vx += Math.sin(me.angle) * thrust;
                     me.vy -= Math.cos(me.angle) * thrust;
                 }
                 
-                // 3. Determine speed limit based on Shift key
+                // 3. Determine speed limit based on Shift
                 const maxSpeed = keys['Shift'] ? 100 : 50;
                 
                 // 4. Calculate current speed
                 let currentSpeed = Math.sqrt(me.vx * me.vx + me.vy * me.vy + me.vz * me.vz);
                 
-                // 5. Cap the speed ONLY if current speed actually exceeds maxSpeed
+                // 5. Apply smooth deceleration if speed exceeds current limit
                 if (currentSpeed > maxSpeed) {
-                    const scaleFactor = maxSpeed / currentSpeed;
-                    me.vx *= scaleFactor;
-                    me.vy *= scaleFactor;
-                    me.vz *= scaleFactor;
+                    const decayRate = 0.95; // Loses ~5% of excess speed per frame (lower = faster drop, e.g., 0.90)
+                    
+                    me.vx *= decayRate;
+                    me.vy *= decayRate;
+                    me.vz *= decayRate;
                 }
                 
                 // 6. Update position
