@@ -681,6 +681,7 @@ HTML_CLIENT = """
                 if (keys['ArrowRight'] || keys['d'] || keys['D']) me.angle += 0.03;
 
                 if (keys['ArrowUp'] || keys['w'] || keys['W']) {
+                    if (keys['Shift'] {
                     const baseAccel = 1.0;
                     const dragFactor = 0.013;
                     const effectiveThrust = baseAccel + (currentSpeed * dragFactor);
