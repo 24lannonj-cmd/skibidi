@@ -758,17 +758,7 @@ HTML_CLIENT = """
                 me.vy *= 0.987;
                 me.vz *= 0.950;
 
-                const newSpeed = Math.sqrt(me.vx * me.vx + me.vy * me.vy + me.vz * me.vz);
-                if (newSpeed > maxSpeed) {
-                    const scale = maxSpeed / newSpeed;
-                    me.vx *= scale;
-                    me.vy *= scale;
-                    me.vz *= scale;
-                }
 
-                me.x += me.vx;
-                me.y += me.vy;
-                me.z += me.vz;
 
                 const shipRadius = 12;
                 for (let key in planetObjects) {
