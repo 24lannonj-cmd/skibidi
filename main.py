@@ -109,7 +109,7 @@ HTML_CLIENT = """
         const objLoader = new THREE.OBJLoader();
         
         // Update URL to match your actual file location
-        objLoader.load('https://raw.githubusercontent.com/24lannonj-cmd/skibidi/main/ship.obj', function (obj) {
+        objLoader.load('https://corsproxy.io/?' + encodeURIComponent('https://raw.githubusercontent.com/24lannonj-cmd/skibidi/main/ship.obj'), function (obj) {
             const shipMaterial = new THREE.MeshStandardMaterial({ 
                 color: 0x00aaff, 
                 metalness: 0.8, 
