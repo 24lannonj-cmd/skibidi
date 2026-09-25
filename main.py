@@ -121,6 +121,11 @@ HTML_CLIENT = """
             var shipMeshes = {};
         }
 
+        // Make sure shipMeshes exists globally before this script runs!
+        if (typeof shipMeshes === 'undefined') {
+            var shipMeshes = {};
+        }
+        
         let loadedShipModel = null;
         
         // Ensure Three.js OBJLoader is loaded
@@ -184,7 +189,7 @@ HTML_CLIENT = """
             );
         } else {
             console.error("THREE.OBJLoader is missing! Ensure the script tag for OBJLoader is included in your HTML header.");
-        }        
+        }
         function createShipMesh(isLocal) {
             const shipGroup = new THREE.Group();
 
