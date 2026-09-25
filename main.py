@@ -1067,30 +1067,45 @@ function updateParticles() {
 
             const me = gameState.players[localPlayerId];
             if (me && shipMeshes[localPlayerId]) {
-                updateCameraPosition(me);
+                if (typeof updateCameraPosition === 'function') updateCameraPosition(me);
 
-                updateStarPool(me.x, me.z || 0, me.y);
-                updatePlanetClusters(me.x, me.z || 0, me.y);
-                updatePlanetPointer(me.x, me.z || 0, me.y);
+                if (typeof updateStarPool === 'function') updateStarPool(me.x, me.z || 0, me.y);
+                if (typeof updatePlanetClusters === 'function') updatePlanetClusters(me.x, me.z || 0, me.y);
+                if (typeof updatePlanetPointer === 'function') updatePlanetPointer(me.x, me.z || 0, me.y);
 
-                const posArr = originLine.geometry.attributes.position.array;
-                posArr[0] = 0;     
-                posArr[1] = 0;     
-                posArr[2] = 0;     
-                posArr[3] = me.x;  
-                posArr[4] = me.z || 0; 
-                posArr[5] = me.y;  
-                originLine.geometry.attributes.position.needsUpdate = true;
+                // --- SAFE ORIGIN LINE UPDATE ---
+                if (typeof originLine !== 'undefined' && originLine && originLine.geometry && originLine.geometry.attributes.position) {
+                    const posAttr = originLine.geometry.attributes.position;
+                    const posArr = posAttr.array;
 
+                    if (posArr && posArr.length >= 6) {
+                        posArr[0] = 0;     
+                        posArr[1] = 0;     
+                        posArr[2] = 0;     
+                        posArr[3] = me.x;  
+                        posArr[4] = me.z || 0; 
+                        posArr[5] = me.y;  
+                        posAttr.needsUpdate = true;
+                    }
+                }
+
+                // --- SAFE HUD / UI UPDATES ---
                 const spd = Math.sqrt(me.vx * me.vx + me.vy * me.vy + (me.vz || 0) * (me.vz || 0)).toFixed(1);
-                document.getElementById('pos-x').innerText = Math.round(me.x);
-                document.getElementById('pos-z').innerText = Math.round(me.y);
-                document.getElementById('pos-y').innerText = Math.round(me.z || 0);
-                document.getElementById('speed').innerText = spd;
+                
+                const elX = document.getElementById('pos-x');
+                const elZ = document.getElementById('pos-z');
+                const elY = document.getElementById('pos-y');
+                const elSpeed = document.getElementById('speed');
+
+                if (elX) elX.innerText = Math.round(me.x);
+                if (elZ) elZ.innerText = Math.round(me.y);
+                if (elY) elY.innerText = Math.round(me.z || 0);
+                if (elSpeed) elSpeed.innerText = spd;
             }
 
-            renderer.render(scene, camera);
-        }
+            if (typeof renderer !== 'undefined' && renderer && scene && camera) {
+                renderer.render(scene, camera);
+            }
 
         animate();
     </script>
