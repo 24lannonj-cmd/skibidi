@@ -21,7 +21,6 @@ HTML_CLIENT = """
     
     <!-- OBJLoader extension -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js"></script>
-
     <style>
         body { 
             margin: 0; 
@@ -232,7 +231,9 @@ HTML_CLIENT = """
                         child.castShadow = true;
                         child.receiveShadow = true;
                     }
-                }
+                });
+                group.add(model);
+            }
 
         const GLOBAL_SEED = 987654321;
         
