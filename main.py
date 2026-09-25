@@ -798,7 +798,7 @@ HTML_CLIENT = """
         // ========================================
         // PHYSICS
         // ========================================
-        function updateLocalPhysics() {
+          function updateLocalPhysics() {
             if (localPlayerId && gameState.players[localPlayerId]) {
                 const me = gameState.players[localPlayerId];
                 
@@ -832,7 +832,6 @@ HTML_CLIENT = """
         
                 // Apply forward engine thrust
                 if (isThrusting) {
-                    // Apply thrust only if we aren't exceeding target speed limit
                     if (currentSpeed < maxSpeed) {
                         const baseAccel = isBoosting ? 1.0 : 0.3;
                         const dragFactor = 0.013;
@@ -841,60 +840,50 @@ HTML_CLIENT = """
                         me.vx += Math.sin(me.angle) * effectiveThrust;
                         me.vy -= Math.cos(me.angle) * effectiveThrust;
                         
-                        // --- DUAL JET PARTICLE SPAWNING ---
-                        // Distance behind the center of the ship to the jet nozzles
+                        // Dual Jet Particle Offset
                         const rearOffset = 12; 
-                        // Width separation for the twin engines (left/right)
                         const jetWidth = 4.0;  
-
-                        // Backwards vector relative to angle
+        
                         const backX = -Math.sin(me.angle) * rearOffset;
                         const backY = Math.cos(me.angle) * rearOffset;
-
-                        // Perpendicular vector for left/right engine separation
+        
                         const perpX = Math.cos(me.angle) * jetWidth;
                         const perpY = Math.sin(me.angle) * jetWidth;
-
-                        // Left Engine particle spawn position
+        
                         const leftX = me.x + backX - perpX;
                         const leftY = me.y + backY - perpY;
-
-                        // Right Engine particle spawn position
+        
                         const rightX = me.x + backX + perpX;
                         const rightY = me.y + backY + perpY;
-
-                        // Spawn particles for both engines
-                        spawnTrailParticle(leftX, leftY, me.z, me.angle);
-                        spawnTrailParticle(rightX, rightY, me.z, me.angle);
+        
+                        if (typeof spawnTrailParticle === 'function') {
+                            spawnTrailParticle(leftX, leftY, me.z, me.angle);
+                            spawnTrailParticle(rightX, rightY, me.z, me.angle);
+                        }
                     }
                     
-                    // Recalculate speed after thrusting
                     currentSpeed = Math.sqrt(me.vx * me.vx + me.vy * me.vy + me.vz * me.vz);
                 }
         
                 // 4. Clamping & Decay Management
                 if (currentSpeed > maxSpeed) {
                     if (isBoosting) {
-                        // Lock strictly at 100 m/s when holding Shift + W
                         const scale = maxSpeed / currentSpeed;
                         me.vx *= scale;
                         me.vy *= scale;
                         me.vz *= scale;
                     } else {
-                        // Smoothly bleed off excess speed down to 50 over ~1.5 seconds when releasing Shift
                         const decayRate = 0.99;
                         me.vx *= decayRate;
                         me.vy *= decayRate;
                         me.vz *= decayRate;
                     }
                 } else if (isThrusting && !isBoosting && currentSpeed > 49.0) {
-                    // Hard lock to EXACTLY 50.0 when cruising at top non-boost speed (stops HUD flicker)
                     const scale = 50 / currentSpeed;
                     me.vx *= scale;
                     me.vy *= scale;
                     me.vz *= scale;
                 } else if (!isThrusting) {
-                    // Standard space friction (only applies when coasting / not holding thrust)
                     me.vx *= 0.987;
                     me.vy *= 0.987;
                     me.vz *= 0.950;
