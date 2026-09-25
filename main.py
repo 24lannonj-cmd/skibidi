@@ -141,7 +141,7 @@ HTML_CLIENT = """
                 });
         
                 loadedShipModel = obj;
-                loadedShipModel.scale.set(1.5, 1.5, 1.5);
+                loadedShipModel.scale.set(5.0, 5.0, 10.0);
                 console.log("OBJ model loaded successfully!");
         
                 // HOT-SWAP EXISTING CONES SAFELY
