@@ -210,35 +210,67 @@ HTML_CLIENT = """
                 }
             );
         }
-        
         // Trigger load
         loadShipAssets();
         function createShipMesh(isLocal) {
             const group = new THREE.Group();
         
-            // 1. Add a temporary placeholder geometry while the model loads
+            // 1. Temporary placeholder geometry (colored cone until model finishes downloading)
             const tempGeo = new THREE.ConeGeometry(5, 15, 8);
             const tempMat = new THREE.MeshBasicMaterial({ color: isLocal ? 0x00ff00 : 0xff0000 });
             const tempMesh = new THREE.Mesh(tempGeo, tempMat);
+            
+            // Rotate temporary cone to point forward along the Z/Y axes
+            tempMesh.rotation.x = Math.PI / 2;
             group.add(tempMesh);
         
-            // 2. Load the actual 3D model
+            // 2. Load the actual GLTF 3D model
             const loader = new THREE.GLTFLoader();
-            loader.load('path/to/ship.gltf', (gltf) => {
-                group.remove(tempMesh); // Remove placeholder
-                group.add(gltf.scene);  // Add loaded model
-            });
+            loader.load(
+                'path/to/ship.gltf', // Replace with your actual model path
+                (gltf) => {
+                    // Remove temporary placeholder
+                    group.remove(tempMesh);
+                    tempGeo.dispose();
+                    tempMat.dispose();
+        
+                    const model = gltf.scene;
+        
+                    // Preserve original colors/textures, or apply a clean grey material fallback
+                    model.traverse((child) => {
+                        if (child.isMesh) {
+                            child.castShadow = true;
+                            child.receiveShadow = true;
+        
+                            // If the mesh lacks a material or texture, apply a neutral grey finish
+                            if (!child.material) {
+                                child.material = new THREE.MeshStandardMaterial({
+                                    color: 0x888888,
+                                    metalness: 0.5,
+                                    roughness: 0.4
+                                });
+                            }
+                        }
+                    });
+        
+                    group.add(model);
+                },
+                undefined,
+                (error) => {
+                    console.error('Error loading ship model:', error);
+                }
+            );
         
             return group;
         }
-
+        
         const GLOBAL_SEED = 987654321;
-
+        
         function seededRandom(seed) {
             let x = Math.sin(seed * 9999) * 10000;
             return x - Math.floor(x);
         }
-
+        
         const planetTextureCache = {};
         // ==============================================================================
         // GLOBAL PLANET TEMPERATURE SYSTEM
@@ -838,26 +870,31 @@ HTML_CLIENT = """
                         const baseAccel = isBoosting ? 1.0 : 0.3;
                         const dragFactor = 0.013;
                         const effectiveThrust = baseAccel + (currentSpeed * dragFactor);
-                        
-                        me.vx += Math.sin(me.angle) * effectiveThrust;
-                        me.vy -= Math.cos(me.angle) * effectiveThrust;
-                        
-                        // Dual Jet Particle Offset
-                        const rearOffset = 12; 
+                
+                        // 1. Calculate ideal velocity direction based on current ship angle
+                        const targetVx = Math.sin(me.angle) * (currentSpeed + effectiveThrust);
+                        const targetVy = -Math.cos(me.angle) * (currentSpeed + effectiveThrust);
+                
+                        // 2. Smoothly blend current velocity toward facing direction (0.15 = grip/responsiveness)
+                        me.vx += (targetVx - me.vx) * 0.15;
+                        me.vy += (targetVy - me.vy) * 0.15;
+                
+                        // Dual Jet Particle Offset (Increased rearOffset to fix issue A)
+                        const rearOffset = 28; // Increased from 12 to clear the ship body
                         const jetWidth = 4.0;  
-        
+                
                         const backX = -Math.sin(me.angle) * rearOffset;
                         const backY = Math.cos(me.angle) * rearOffset;
-        
+                
                         const perpX = Math.cos(me.angle) * jetWidth;
                         const perpY = Math.sin(me.angle) * jetWidth;
-        
+                
                         const leftX = me.x + backX - perpX;
                         const leftY = me.y + backY - perpY;
-        
+                
                         const rightX = me.x + backX + perpX;
                         const rightY = me.y + backY + perpY;
-        
+                
                         if (typeof spawnTrailParticle === 'function') {
                             spawnTrailParticle(leftX, leftY, me.z, me.angle);
                             spawnTrailParticle(rightX, rightY, me.z, me.angle);
