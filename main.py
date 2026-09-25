@@ -803,7 +803,7 @@ HTML_CLIENT = """
         // ========================================
         // PHYSICS
         // ========================================
-          function updateLocalPhysics() {
+        function updateLocalPhysics() {
             if (localPlayerId && gameState.players[localPlayerId]) {
                 const me = gameState.players[localPlayerId];
                 
@@ -836,27 +836,23 @@ HTML_CLIENT = """
                 let currentSpeed = Math.sqrt(me.vx * me.vx + me.vy * me.vy + me.vz * me.vz);
         
                 // Apply forward engine thrust
-                // Apply forward engine thrust
-                // Apply forward engine thrust
                 if (isThrusting) {
                     if (currentSpeed < maxSpeed) {
                         const baseAccel = isBoosting ? 1.0 : 0.3;
                         const dragFactor = 0.013;
                         const effectiveThrust = baseAccel + (currentSpeed * dragFactor);
-
+        
                         // --- GRADUAL / SMOOTH VELOCITY BLENDING ---
-                        // Target velocity based on facing angle
                         const targetVx = Math.sin(me.angle) * (currentSpeed + effectiveThrust);
                         const targetVy = -Math.cos(me.angle) * (currentSpeed + effectiveThrust);
                         
-                        // 0.035 creates a smooth, gentle arc when turning while accelerating (instead of snapping)
                         const turnGrip = 0.035; 
                         me.vx += (targetVx - me.vx) * turnGrip;
                         me.vy += (targetVy - me.vy) * turnGrip;
                         
                         // --- DUAL JET ENGINE PARTICLE OFFSETS ---
-                        const rearOffset = 38; // Pushes particles cleanly behind the ship tail
-                        const jetWidth = 14.0;  // Aligns with outer dual thruster nozzles
+                        const rearOffset = 38;
+                        const jetWidth = 14.0; 
         
                         const backX = -Math.sin(me.angle) * rearOffset;
                         const backY = Math.cos(me.angle) * rearOffset;
@@ -878,6 +874,7 @@ HTML_CLIENT = """
                     
                     currentSpeed = Math.sqrt(me.vx * me.vx + me.vy * me.vy + me.vz * me.vz);
                 }
+        
                 // 4. Clamping & Decay Management
                 if (currentSpeed > maxSpeed) {
                     if (isBoosting) {
@@ -938,15 +935,16 @@ HTML_CLIENT = """
                             me.angle = Math.atan2(me.vx, -me.vy);
                         }
                     }
-                }
+                } 
+        
                 // 7. Sync over WebSocket
-                if (ws.readyState === WebSocket.OPEN) {
+                if (typeof ws !== 'undefined' && ws.readyState === WebSocket.OPEN) {
                     ws.send(JSON.stringify({ 
                         type: 'sync', x: me.x, y: me.y, z: me.z, angle: me.angle, vx: me.vx, vy: me.vy, vz: me.vz 
                     }));
                 }
-            }
-        }
+            } 
+        } 
 
         function updateCameraPosition(me) {
             const cameraDistance = 140; 
@@ -996,7 +994,8 @@ HTML_CLIENT = """
                     shipMeshes[id].position.y = p.z || 0;
                     shipMeshes[id].position.z = p.y;
                     shipMeshes[id].rotation.y = -p.angle;
-                } else {
+                } 
+                else {
                     shipMeshes[id].position.x += (p.x - shipMeshes[id].position.x) * 0.25;
                     shipMeshes[id].position.y += ((p.z || 0) - shipMeshes[id].position.y) * 0.25;
                     shipMeshes[id].position.z += (p.y - shipMeshes[id].position.z) * 0.25;
