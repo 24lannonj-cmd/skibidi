@@ -5,7 +5,8 @@ import asyncio
 import json
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
-
+from fastapi.staticfiles import StaticFiles
+app.mount("/static", StaticFiles(directory="static"), name="static")
 app = FastAPI()
 
 # ==============================================================================
@@ -15,10 +16,14 @@ HTML_CLIENT = """
 <!DOCTYPE html>
 <html>
 <head>
-    <!-- Import OBJLoader (and MTLLoader if you have a .mtl file) -->
+    <title>Infinite Synced Space Sandbox 3D</title>
+    <!-- 1. Load Core Three.js FIRST -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    
+    <!-- 2. Load Loaders AFTER Three.js -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/MTLLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js"></script>
-    <title>Infinite Synced Space Sandbox 3D</title>
+
     <style>
         body { 
             margin: 0; 
@@ -66,8 +71,6 @@ HTML_CLIENT = """
             display: none;
         }
     </style>
-    <!-- Three.js Library -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
     <div id="ui">
@@ -85,75 +88,10 @@ HTML_CLIENT = """
     <div id="nav-text">TARGET</div>
 
     <script>
+        // Core Setup
         const scene = new THREE.Scene();
         scene.fog = new THREE.FogExp2(0x020208, 0.00002);
 
-        // 1. Core Setup
-        const scene = new THREE.Scene();
-        const camera = new THREE.PerspectiveCamera(...);
-        
-        const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
-        dirLight.position.set(50, 100, 50);
-        scene.add(dirLight);
-    
-    
-        // ==============================================================================
-        // 2. PASTE OPTION B HERE (ASSET LOADING)
-        // ==============================================================================
-        let loadedShipModel = null;
-    
-        const objLoader = new THREE.OBJLoader();
-        objLoader.load('path/to/ship.obj', function (obj) {
-            // Create a custom material for the imported OBJ
-            const shipMaterial = new THREE.MeshStandardMaterial({ 
-                color: 0x00aaff, 
-                metalness: 0.8, 
-                roughness: 0.2 
-            });
-    
-            // Apply material to all child meshes in the OBJ
-            obj.traverse((child) => {
-                if (child.isMesh) {
-                    child.material = shipMaterial;
-                }
-            });
-    
-            loadedShipModel = obj;
-            
-            // Adjust scale if the model imports too big or too small
-            loadedShipModel.scale.set(1.5, 1.5, 1.5);
-            
-            console.log("OBJ model loaded successfully!");
-        });
-    
-
-    // ==============================================================================
-    // 3. SHIP FACTORY FUNCTION
-    // ==============================================================================
-    function createShipMesh(isLocal) {
-        const shipGroup = new THREE.Group();
-
-        if (loadedShipModel) {
-            // Clone the model for each player
-            const shipInstance = loadedShipModel.clone();
-            
-            // Un-comment and adjust if the ship points in the wrong direction:
-            // shipInstance.rotation.y = Math.PI; 
-            
-            shipGroup.add(shipInstance);
-        } else {
-            // Placeholder shape while the file is downloading
-            const tempGeo = new THREE.ConeGeometry(5, 15, 8);
-            const tempMat = new THREE.MeshBasicMaterial({ color: isLocal ? 0x00ff00 : 0xff0000 });
-            const tempMesh = new THREE.Mesh(tempGeo, tempMat);
-            tempMesh.rotation.x = Math.PI / 2;
-            shipGroup.add(tempMesh);
-        }
-
-        return shipGroup;
-    }
-
-    // 4. Rest of your physics, updateLocalPhysics(), and animate() loop below...
         const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000000);
         const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
         renderer.setSize(window.innerWidth, window.innerHeight);
@@ -167,6 +105,46 @@ HTML_CLIENT = """
         sunLight.position.set(50000, 100000, 50000);
         scene.add(sunLight);
 
+        // Model Loader Setup
+        let loadedShipModel = null;
+        const objLoader = new THREE.OBJLoader();
+        
+        // Update URL to match your actual file location
+        objLoader.load('/static/ship.obj', function (obj) {
+            const shipMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0x00aaff, 
+                metalness: 0.8, 
+                roughness: 0.2 
+            });
+
+            obj.traverse((child) => {
+                if (child.isMesh) {
+                    child.material = shipMaterial;
+                }
+            });
+
+            loadedShipModel = obj;
+            loadedShipModel.scale.set(1.5, 1.5, 1.5);
+            console.log("OBJ model loaded successfully!");
+        });
+
+        function createShipMesh(isLocal) {
+            const shipGroup = new THREE.Group();
+
+            if (loadedShipModel) {
+                const shipInstance = loadedShipModel.clone();
+                shipGroup.add(shipInstance);
+            } else {
+                const tempGeo = new THREE.ConeGeometry(5, 15, 8);
+                const tempMat = new THREE.MeshBasicMaterial({ color: isLocal ? 0x00ff00 : 0xff0000 });
+                const tempMesh = new THREE.Mesh(tempGeo, tempMat);
+                tempMesh.rotation.x = Math.PI / 2;
+                shipGroup.add(tempMesh);
+            }
+
+            return shipGroup;
+        }
+
         const GLOBAL_SEED = 987654321;
 
         function seededRandom(seed) {
@@ -175,7 +153,6 @@ HTML_CLIENT = """
         }
 
         const planetTextureCache = {};
-
         // ==============================================================================
         // GLOBAL PLANET TEMPERATURE SYSTEM
         // ==============================================================================
