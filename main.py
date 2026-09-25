@@ -643,33 +643,57 @@ HTML_CLIENT = """
         // ==============================================================================
         // 3D MODEL FACTORIES
         // ==============================================================================
+        // 1. Keep your standard createShipMesh function
         function createShipMesh(isLocal) {
-            const group = new THREE.Group();
-
-            const hullGeo = new THREE.ConeGeometry(8, 24, 4);
-            hullGeo.rotateX(-Math.PI / 2);
-            const hullMat = new THREE.MeshStandardMaterial({ 
-                color: isLocal ? 0x00ff88 : 0xff3344, 
-                roughness: 0.3, 
-                metalness: 0.8 
-            });
-            const hull = new THREE.Mesh(hullGeo, hullMat);
-            group.add(hull);
-
-            const engineGeo = new THREE.CylinderGeometry(2.5, 0, 14, 6);
-            engineGeo.rotateX(-Math.PI / 2);
-            const engineMat = new THREE.MeshStandardMaterial({ 
-                color: 0xff5500,
-                emissive: 0xff4400,
-                emissiveIntensity: 2.0
-            });
-            const engine = new THREE.Mesh(engineGeo, engineMat);
-            engine.position.z = 12;
-            group.add(engine);
-
-            return group;
+            const shipGroup = new THREE.Group();
+        
+            if (loadedShipModel) {
+                const shipInstance = loadedShipModel.clone();
+                shipGroup.add(shipInstance);
+            } else {
+                const tempGeo = new THREE.ConeGeometry(5, 15, 8);
+                const tempMat = new THREE.MeshBasicMaterial({ color: isLocal ? 0x00ff00 : 0xff0000 });
+                const tempMesh = new THREE.Mesh(tempGeo, tempMat);
+                tempMesh.rotation.x = Math.PI / 2;
+                shipGroup.add(tempMesh);
+            }
+        
+            return shipGroup;
         }
-
+        
+        // 2. Direct replacement when the loader finishes
+        const cdnUrl = 'https://cdn.jsdelivr.net/gh/24lannonj-cmd/skibidi@main/ship.obj';
+        
+        objLoader.load(cdnUrl, function (obj) {
+            const shipMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0x00aaff, 
+                metalness: 0.8, 
+                roughness: 0.2 
+            });
+        
+            obj.traverse((child) => {
+                if (child.isMesh) {
+                    child.material = shipMaterial;
+                    child.geometry.computeBoundingBox();
+                    child.geometry.center();
+                }
+            });
+        
+            loadedShipModel = obj;
+            loadedShipModel.scale.set(1.5, 1.5, 1.5);
+        
+            // SWAP EXISTING CONES IMMEDIATELY UPON DOWNLOAD
+            for (let id in shipMeshes) {
+                if (shipMeshes[id]) {
+                    // Remove old cone children
+                    while (shipMeshes[id].children.length > 0) { 
+                        shipMeshes[id].remove(shipMeshes[id].children[0]); 
+                    }
+                    // Add the newly loaded 3D model into the existing group
+                    shipMeshes[id].add(loadedShipModel.clone());
+                }
+            }
+        });
         function createStationMesh() {
             const group = new THREE.Group();
             const ringGeo = new THREE.TorusGeometry(80, 6, 8, 32);
@@ -887,26 +911,40 @@ HTML_CLIENT = """
             camera.lookAt(lookTarget);
         }
 
-        function animate() {
+            function animate() {
             requestAnimationFrame(animate);
-            updateLocalPhysics();
-            updateParticles();
-
-            stationMesh.rotation.y += 0.005;
-
-            // Smooth planet spin
-            for (let key in planetObjects) {
-                if (planetObjects[key] && planetObjects[key].mesh) {
-                    planetObjects[key].mesh.rotation.y += 0.001;
+        
+            // Update local ship physics and movement
+            updatePhysics();
+        
+            // Update and sync all player meshes in the scene
+            for (let id in players) {
+                if (!shipMeshes[id]) {
+                    shipMeshes[id] = createShipMesh(id === localPlayerId);
+                    scene.add(shipMeshes[id]);
+                }
+        
+                const pData = players[id];
+                shipMeshes[id].position.set(pData.x, pData.y, pData.z);
+                shipMeshes[id].rotation.set(pData.rx, pData.ry, pData.rz);
+            }
+            
+            // Clean up meshes for players who disconnected
+            for (let id in shipMeshes) {
+                if (!players[id]) {
+                    scene.remove(shipMeshes[id]);
+                    delete shipMeshes[id];
                 }
             }
-
-            for (let id in gameState.players) {
-                const p = gameState.players[id];
-                if (!p) continue;
-
-                // Inside your animate() function, right where player meshes are placed/updated:
-                }
+        
+            // Update camera position to follow local player
+            if (shipMeshes[localPlayerId]) {
+                updateCamera(shipMeshes[localPlayerId]);
+            }
+        
+            renderer.render(scene, camera);
+        }
+    
 
                 if (id === localPlayerId) {
                     shipMeshes[id].position.x = p.x;
