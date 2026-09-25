@@ -129,21 +129,22 @@ HTML_CLIENT = """
         sunLight.position.set(50000, 100000, 50000);
         scene.add(sunLight);
         
-        // Model Loader Setup
-        // Make sure shipMeshes exists globally before this script runs!
-        if (typeof shipMeshes === 'undefined') {
-            var shipMeshes = {};
-        }
 
-        // Make sure shipMeshes exists globally before this script runs!
-        if (typeof shipMeshes === 'undefined') {
-            var shipMeshes = {};
         }
         
         let loadedShipModel = null;
+
+        function loadShipAssets() {
+            if (typeof THREE === 'undefined') {
+                document.getElementById('debug-log').innerHTML += `<br>❌ Three.js not loaded yet!`;
+                return;
+            }
         
-        // Ensure Three.js OBJLoader is loaded
-        if (typeof THREE.OBJLoader !== 'undefined') {
+            if (typeof THREE.OBJLoader === 'undefined') {
+                document.getElementById('debug-log').innerHTML += `<br>❌ OBJLoader library missing! Make sure the script tag is in <head>`;
+                return;
+            }
+        
             const objLoader = new THREE.OBJLoader();
             const cdnUrl = 'https://cdn.jsdelivr.net/gh/24lannonj-cmd/skibidi@main/ship.obj';
         
@@ -180,30 +181,33 @@ HTML_CLIENT = """
                     });
         
                     loadedShipModel = obj;
-                    // Requested scale (Note: 100 in Z stretches the model twice as long)
+                    // Requested scale: (50, 50, 100)
                     loadedShipModel.scale.set(50, 50, 100); 
                     loadedShipModel.rotation.y = Math.PI;
         
-                    console.log("Model successfully loaded and scaled!");
+                    document.getElementById('debug-log').innerHTML += `<br>✅ Ship model successfully loaded!`;
         
-                    // Hot-swap active ship meshes
-                    for (let id in shipMeshes) {
-                        if (shipMeshes[id] && shipMeshes[id].children) {
-                            while (shipMeshes[id].children.length > 0) { 
-                                shipMeshes[id].remove(shipMeshes[id].children[0]); 
+                    // Hot-swap fallback cones
+                    if (typeof shipMeshes !== 'undefined') {
+                        for (let id in shipMeshes) {
+                            if (shipMeshes[id] && shipMeshes[id].children) {
+                                while (shipMeshes[id].children.length > 0) { 
+                                    shipMeshes[id].remove(shipMeshes[id].children[0]); 
+                                }
+                                shipMeshes[id].add(loadedShipModel.clone());
                             }
-                            shipMeshes[id].add(loadedShipModel.clone());
                         }
                     }
                 },
                 undefined,
                 function (error) {
-                    console.error("OBJLoader failed to fetch/parse model:", error);
+                    document.getElementById('debug-log').innerHTML += `<br>❌ Failed to fetch/parse ship.obj from CDN`;
                 }
             );
-        } else {
-            console.error("THREE.OBJLoader is missing! Ensure the script tag for OBJLoader is included in your HTML header.");
         }
+        
+        // Trigger load
+        loadShipAssets();
         function createShipMesh(isLocal) {
             const shipGroup = new THREE.Group();
 
