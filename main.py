@@ -68,6 +68,20 @@ HTML_CLIENT = """
             white-space: nowrap;
             display: none;
         }
+        <div id="debug-log" style="position: fixed; top: 10px; left: 10px; width: 90%; max-height: 150px; overflow-y: auto; background: rgba(0,0,0,0.85); color: #ff5555; font-family: monospace; font-size: 12px; padding: 10px; border-radius: 5px; z-index: 99999; pointer-events: none;">
+        <strong>Debug Log:</strong>
+        </div>
+
+        <script>
+        // Catch every single JavaScript error and show it on screen
+        window.onerror = function(msg, url, lineNo, columnNo, error) {
+        const logBox = document.getElementById('debug-log');
+            if (logBox) {
+                logBox.innerHTML += `<br>❌ Error: ${msg} (Line ${lineNo})`;
+        }
+        return false;
+    };
+</script>
     </style>
 </head>
 <body>
