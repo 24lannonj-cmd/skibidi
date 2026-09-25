@@ -141,7 +141,7 @@ HTML_CLIENT = """
                 });
         
                 loadedShipModel = obj;
-                loadedShipModel.scale.set(5.0, 5.0, 5.0);
+                loadedShipModel.scale.set(50, 50, 100);
                 loadedShipModel.rotation.y = Math.PI; // Keeps your 180° orientation flip
         
                 // Hot-swap existing fallback cones with the multi-colored ship
