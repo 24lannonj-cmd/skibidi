@@ -117,27 +117,32 @@ HTML_CLIENT = """
         scene.add(sunLight);
         
         // Model Loader Setup
+        // Make sure shipMeshes exists globally before this script runs!
+        if (typeof shipMeshes === 'undefined') {
+            var shipMeshes = {};
+        }
+
         let loadedShipModel = null;
-        const objLoader = new THREE.OBJLoader();
         
-        const cdnUrl = 'https://cdn.jsdelivr.net/gh/24lannonj-cmd/skibidi@main/ship.obj';
+        // Ensure Three.js OBJLoader is loaded
+        if (typeof THREE.OBJLoader !== 'undefined') {
+            const objLoader = new THREE.OBJLoader();
+            const cdnUrl = 'https://cdn.jsdelivr.net/gh/24lannonj-cmd/skibidi@main/ship.obj';
         
-        // Materials matching the image theme:
-        const redHullMat = new THREE.MeshStandardMaterial({ color: 0xd62222, roughness: 0.3, metalness: 0.1 });
-        const whiteHullMat = new THREE.MeshStandardMaterial({ color: 0xf0f0f0, roughness: 0.3, metalness: 0.1 });
-        const darkMetalMat = new THREE.MeshStandardMaterial({ color: 0x222225, roughness: 0.2, metalness: 0.9 });
-        const glassMat = new THREE.MeshStandardMaterial({ color: 0x111115, roughness: 0.1, metalness: 0.9 });
+            // No Man's Sky Color Palette
+            const redHullMat = new THREE.MeshStandardMaterial({ color: 0xd62222, roughness: 0.3, metalness: 0.1 });
+            const whiteHullMat = new THREE.MeshStandardMaterial({ color: 0xf0f0f0, roughness: 0.3, metalness: 0.1 });
+            const darkMetalMat = new THREE.MeshStandardMaterial({ color: 0x222225, roughness: 0.2, metalness: 0.9 });
+            const glassMat = new THREE.MeshStandardMaterial({ color: 0x111115, roughness: 0.1, metalness: 0.9 });
         
-        objLoader.load(
-            cdnUrl, 
-            function (obj) {
-                let meshCount = 0;
+            objLoader.load(
+                cdnUrl, 
+                function (obj) {
+                    let meshCount = 0;
         
-                obj.traverse((child) => {
-                    if (child.isMesh) {
-                        try {
-                            // Alternates colors across sub-meshes if name mapping isn't available
-                            const name = child.name.toLowerCase();
+                    obj.traverse((child) => {
+                        if (child && child.isMesh) {
+                            const name = (child.name || '').toLowerCase();
                             if (name.includes('glass') || name.includes('cockpit')) {
                                 child.material = glassMat;
                             } else if (name.includes('engine') || name.includes('metal')) {
@@ -152,36 +157,35 @@ HTML_CLIENT = """
                                 child.geometry.computeBoundingBox();
                                 child.geometry.center();
                             }
-                        } catch (e) {
-                            console.warn("Could not set material on child mesh:", e);
+                            meshCount++;
                         }
-                        meshCount++;
-                    }
-                });
+                    });
         
-                loadedShipModel = obj;
-                
-                // Scale updated to requested dimensions
-                loadedShipModel.scale.set(50, 50, 100); 
-                loadedShipModel.rotation.y = Math.PI; // Keeps 180° orientation flip
+                    loadedShipModel = obj;
+                    // Requested scale (Note: 100 in Z stretches the model twice as long)
+                    loadedShipModel.scale.set(50, 50, 100); 
+                    loadedShipModel.rotation.y = Math.PI;
         
-                console.log("OBJ model loaded and styled successfully!");
+                    console.log("Model successfully loaded and scaled!");
         
-                // Safely hot-swap existing player cones
-                for (let id in shipMeshes) {
-                    if (shipMeshes[id]) {
-                        while (shipMeshes[id].children.length > 0) { 
-                            shipMeshes[id].remove(shipMeshes[id].children[0]); 
+                    // Hot-swap active ship meshes
+                    for (let id in shipMeshes) {
+                        if (shipMeshes[id] && shipMeshes[id].children) {
+                            while (shipMeshes[id].children.length > 0) { 
+                                shipMeshes[id].remove(shipMeshes[id].children[0]); 
+                            }
+                            shipMeshes[id].add(loadedShipModel.clone());
                         }
-                        shipMeshes[id].add(loadedShipModel.clone());
                     }
+                },
+                undefined,
+                function (error) {
+                    console.error("OBJLoader failed to fetch/parse model:", error);
                 }
-            },
-            undefined,
-            function (error) {
-                console.error("Failed to load model from jsDelivr:", error);
-            }
-        );        
+            );
+        } else {
+            console.error("THREE.OBJLoader is missing! Ensure the script tag for OBJLoader is included in your HTML header.");
+        }        
         function createShipMesh(isLocal) {
             const shipGroup = new THREE.Group();
 
