@@ -120,31 +120,31 @@ HTML_CLIENT = """
         let loadedShipModel = null;
         const objLoader = new THREE.OBJLoader();
         
-        // Clean production CDN with full CORS support
         const cdnUrl = 'https://cdn.jsdelivr.net/gh/24lannonj-cmd/skibidi@main/ship.obj';
         
         objLoader.load(
             cdnUrl, 
             function (obj) {
-                const shipMaterial = new THREE.MeshStandardMaterial({ 
-                    color: 0x00aaff, 
-                    metalness: 0.8, 
-                    roughness: 0.2 
-                });
-                
                 obj.traverse((child) => {
                     if (child.isMesh) {
-                        child.material = shipMaterial;
+                        // Remove any custom 'child.material = ...' assignment 
+                        // so Three.js uses the model's native colors/materials!
+                        
+                        // If native materials appear dark, ensure standard material properties remain intact:
+                        if (child.material) {
+                            child.material.side = THREE.DoubleSide; // Prevents inside-out inverted polygons
+                        }
+        
                         child.geometry.computeBoundingBox();
-                        child.geometry.center(); // Center local origin
+                        child.geometry.center(); // Center local geometry origin
                     }
                 });
+        
                 loadedShipModel = obj;
-                loadedShipModel.scale.set(50, 50, 100);
-                console.log("OBJ model loaded successfully!");
-                loadedShipModel.rotation.y = Math.PI; // 180 degree yaw rotation
-                // HOT-SWAP EXISTING CONES SAFELY
-                // Replaces geometry inside active player groups without breaking loop variables
+                loadedShipModel.scale.set(5.0, 5.0, 5.0);
+                loadedShipModel.rotation.y = Math.PI; // Keeps your 180° orientation flip
+        
+                // Hot-swap existing fallback cones with the multi-colored ship
                 for (let id in shipMeshes) {
                     if (shipMeshes[id]) {
                         while (shipMeshes[id].children.length > 0) { 
@@ -742,7 +742,7 @@ HTML_CLIENT = """
                 document.getElementById('player-count').innerText = Object.keys(data.gameState.players).length;
             }
         };
-        // =========================================
+        // ========================================
         // PHYSICS
         // ========================================
         function updateLocalPhysics() {
@@ -788,8 +788,31 @@ HTML_CLIENT = """
                         me.vx += Math.sin(me.angle) * effectiveThrust;
                         me.vy -= Math.cos(me.angle) * effectiveThrust;
                         
-                        // Spawn engine particles while accelerating
-                        spawnTrailParticle(me.x, me.y, me.z, me.angle);
+                        // --- DUAL JET PARTICLE SPAWNING ---
+                        // Distance behind the center of the ship to the jet nozzles
+                        const rearOffset = 12; 
+                        // Width separation for the twin engines (left/right)
+                        const jetWidth = 4.0;  
+
+                        // Backwards vector relative to angle
+                        const backX = -Math.sin(me.angle) * rearOffset;
+                        const backY = Math.cos(me.angle) * rearOffset;
+
+                        // Perpendicular vector for left/right engine separation
+                        const perpX = Math.cos(me.angle) * jetWidth;
+                        const perpY = Math.sin(me.angle) * jetWidth;
+
+                        // Left Engine particle spawn position
+                        const leftX = me.x + backX - perpX;
+                        const leftY = me.y + backY - perpY;
+
+                        // Right Engine particle spawn position
+                        const rightX = me.x + backX + perpX;
+                        const rightY = me.y + backY + perpY;
+
+                        // Spawn particles for both engines
+                        spawnTrailParticle(leftX, leftY, me.z, me.angle);
+                        spawnTrailParticle(rightX, rightY, me.z, me.angle);
                     }
                     
                     // Recalculate speed after thrusting
@@ -861,7 +884,8 @@ HTML_CLIENT = """
                         }
                     }
                 }
-        
+            }
+        }
                 // 7. Sync over WebSocket
                 if (ws.readyState === WebSocket.OPEN) {
                     ws.send(JSON.stringify({ 
