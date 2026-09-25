@@ -154,18 +154,22 @@ HTML_CLIENT = """
         );
         function createShipMesh(isLocal) {
             const shipGroup = new THREE.Group();
-
+        
             if (loadedShipModel) {
                 const shipInstance = loadedShipModel.clone();
                 shipGroup.add(shipInstance);
             } else {
+                // Temporary placeholder shape while downloading
                 const tempGeo = new THREE.ConeGeometry(5, 15, 8);
                 const tempMat = new THREE.MeshBasicMaterial({ color: isLocal ? 0x00ff00 : 0xff0000 });
                 const tempMesh = new THREE.Mesh(tempGeo, tempMat);
                 tempMesh.rotation.x = Math.PI / 2;
                 shipGroup.add(tempMesh);
+                
+                // Mark this mesh as temporary so animate() knows to swap it!
+                shipGroup.isFallback = true; 
             }
-
+        
             return shipGroup;
         }
 
