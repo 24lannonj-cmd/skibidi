@@ -131,7 +131,7 @@ HTML_CLIENT = """
                     metalness: 0.8, 
                     roughness: 0.2 
                 });
-        
+                
                 obj.traverse((child) => {
                     if (child.isMesh) {
                         child.material = shipMaterial;
@@ -139,7 +139,7 @@ HTML_CLIENT = """
                         child.geometry.center(); // Center local origin
                     }
                 });
-        
+                loadedShipModel.rotation.y = Math.PI; // 180 degree yaw rotation
                 loadedShipModel = obj;
                 loadedShipModel.scale.set(50, 50, 100);
                 console.log("OBJ model loaded successfully!");
