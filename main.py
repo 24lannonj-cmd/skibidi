@@ -120,12 +120,11 @@ HTML_CLIENT = """
         let loadedShipModel = null;
         const objLoader = new THREE.OBJLoader();
         
-        // Bypasses GitHub CORS blocking
-        const targetUrl = 'https://raw.githubusercontent.com/24lannonj-cmd/skibidi/main/ship.obj';
-        const proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent(targetUrl);
+        // jsDelivr serves raw GitHub files cleanly with proper CORS headers
+        const cdnUrl = 'https://cdn.jsdelivr.net/gh/24lannonj-cmd/skibidi@main/ship.obj';
         
         objLoader.load(
-            proxyUrl, 
+            cdnUrl, 
             function (obj) {
                 const shipMaterial = new THREE.MeshStandardMaterial({ 
                     color: 0x00aaff, 
@@ -137,23 +136,22 @@ HTML_CLIENT = """
                     if (child.isMesh) {
                         child.material = shipMaterial;
                         child.geometry.computeBoundingBox();
-                        child.geometry.center(); // Keeps the ship aligned with controls
+                        child.geometry.center(); // Center ship origin
                     }
                 });
         
                 loadedShipModel = obj;
                 loadedShipModel.scale.set(1.5, 1.5, 1.5);
             },
-            undefined, // Progress callback (optional)
-            function (error) {
-                // Displays error directly on your game screen if it fails
+            undefined,
+            function (xhr) {
+                // Red screen banner if download fails
                 const errDiv = document.createElement('div');
                 errDiv.style.cssText = 'position:fixed; bottom:10px; left:10px; background:rgba(255,0,0,0.85); color:#fff; padding:10px; z-index:9999; font-size:12px;';
-                errDiv.innerText = 'Model Load Failed: ' + error.message;
+                errDiv.innerText = 'Model Load Failed from CDN';
                 document.body.appendChild(errDiv);
             }
         );
-
         function createShipMesh(isLocal) {
             const shipGroup = new THREE.Group();
 
