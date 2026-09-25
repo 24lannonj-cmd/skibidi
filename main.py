@@ -120,24 +120,46 @@ HTML_CLIENT = """
         let loadedShipModel = null;
         const objLoader = new THREE.OBJLoader();
         
-        // Update URL to match your actual file location
-        objLoader.load('https://corsproxy.io/?' + encodeURIComponent('https://raw.githubusercontent.com/24lannonj-cmd/skibidi/main/ship.obj'), function (obj) {
-            const shipMaterial = new THREE.MeshStandardMaterial({ 
-                color: 0x00aaff, 
-                metalness: 0.8, 
-                roughness: 0.2 
-            });
-
-            obj.traverse((child) => {
-                if (child.isMesh) {
-                    child.material = shipMaterial;
+        // Clean production CDN with full CORS support
+        const cdnUrl = 'https://cdn.jsdelivr.net/gh/24lannonj-cmd/skibidi@main/ship.obj';
+        
+        objLoader.load(
+            cdnUrl, 
+            function (obj) {
+                const shipMaterial = new THREE.MeshStandardMaterial({ 
+                    color: 0x00aaff, 
+                    metalness: 0.8, 
+                    roughness: 0.2 
+                });
+        
+                obj.traverse((child) => {
+                    if (child.isMesh) {
+                        child.material = shipMaterial;
+                        child.geometry.computeBoundingBox();
+                        child.geometry.center(); // Center local origin
+                    }
+                });
+        
+                loadedShipModel = obj;
+                loadedShipModel.scale.set(1.5, 1.5, 1.5);
+                console.log("OBJ model loaded successfully!");
+        
+                // HOT-SWAP EXISTING CONES SAFELY
+                // Replaces geometry inside active player groups without breaking loop variables
+                for (let id in shipMeshes) {
+                    if (shipMeshes[id]) {
+                        while (shipMeshes[id].children.length > 0) { 
+                            shipMeshes[id].remove(shipMeshes[id].children[0]); 
+                        }
+                        shipMeshes[id].add(loadedShipModel.clone());
+                    }
                 }
-            });
-
-            loadedShipModel = obj;
-            loadedShipModel.scale.set(1.5, 1.5, 1.5);
-            console.log("OBJ model loaded successfully!");
-        });
+            },
+            undefined,
+            function (error) {
+                console.error("Failed to load model from jsDelivr:", error);
+            }
+        );
 
         function createShipMesh(isLocal) {
             const shipGroup = new THREE.Group();
