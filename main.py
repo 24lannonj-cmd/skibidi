@@ -87,9 +87,6 @@ HTML_CLIENT = """
             return false;
         };
     </script>
-    </style>
-</head>
-<body>
     <div id="ui">
         <h3 style="margin-top: 0; color: #00ffff; text-shadow: 0 0 8px #00ffff;">3D Infinite Warp Flight Deck</h3>
         <p>Position: X <span id="pos-x" class="stat">0</span> | Z <span id="pos-z" class="stat">0</span> | Alt <span id="pos-y" class="stat">0</span></p>
@@ -221,20 +218,22 @@ HTML_CLIENT = """
             const tempMesh = new THREE.Mesh(tempGeo, tempMat);
             tempMesh.rotation.x = Math.PI / 2;
             group.add(tempMesh);
-        
+            
             // 2. Load OBJ / GLTF model cleanly without forcing solid red
             if (typeof loadedShipModel !== 'undefined' && loadedShipModel) {
                 group.remove(tempMesh);
                 tempGeo.dispose();
                 tempMat.dispose();
-        
+            }
                 const model = loadedShipModel.clone();
-                
                 // Ensure no global red material override is applied
                 model.traverse((child) => {
                     if (child.isMesh) {
                         child.castShadow = true;
                         child.receiveShadow = true;
+                    }
+                }
+
         const GLOBAL_SEED = 987654321;
         
         function seededRandom(seed) {
@@ -686,40 +685,10 @@ HTML_CLIENT = """
             trailParticles.push({ mesh: particle, life: 1.0 });
         }
 
-function updateParticles() {
-            for (let i = trailParticles.length - 1; i >= 0; i--) {
-                const p = trailParticles[i];
-                p.life -= 0.1;
-                p.mesh.scale.multiplyScalar(0.92);
-                p.mesh.material.opacity = p.life;
-
-                if (p.life <= 0) {
-                    scene.remove(p.mesh);
-                    p.mesh.geometry.dispose();
-                    p.mesh.material.dispose();
-                    trailParticles.splice(i, 1);
-                }
-            }
-        }
-
         // ==============================================================================
         // 3D MODEL FACTORIES
         // ==============================================================================
-        function createShipMesh(isLocal) {
-            const group = new THREE.Group();
-
-            // Temporary placeholder geometry while the model loads
-            const tempGeo = new THREE.ConeGeometry(5, 15, 8);
-            tempGeo.rotateX(Math.PI / 2);
-            const tempMat = new THREE.MeshBasicMaterial({ color: isLocal ? 0x00ff88 : 0xff3344 });
-            const tempMesh = new THREE.Mesh(tempGeo, tempMat);
-            group.add(tempMesh);
-
-            // Load external OBJ asset
-            if (typeof THREE.OBJLoader !== 'undefined') {
-                const loader = new THREE.OBJLoader
-            }
-        }
+        
         function updateParticles() {
             for (let i = trailParticles.length - 1; i >= 0; i--) {
                 const p = trailParticles[i];
@@ -1108,6 +1077,7 @@ function updateParticles() {
             }
 
         animate();
+        }
     </script>
 </body>
 </html>
