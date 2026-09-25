@@ -926,8 +926,6 @@ HTML_CLIENT = """
                         }
                     }
                 }
-            }
-        }
                 // 7. Sync over WebSocket
                 if (ws.readyState === WebSocket.OPEN) {
                     ws.send(JSON.stringify({ 
