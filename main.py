@@ -127,24 +127,25 @@ HTML_CLIENT = """
             function (obj) {
                 obj.traverse((child) => {
                     if (child.isMesh) {
-                        // Remove any custom 'child.material = ...' assignment 
-                        // so Three.js uses the model's native colors/materials!
-                        
-                        // If native materials appear dark, ensure standard material properties remain intact:
-                        if (child.material) {
-                            child.material.side = THREE.DoubleSide; // Prevents inside-out inverted polygons
+                        // Safely set double sided rendering without crashing on material arrays
+                        if (Array.isArray(child.material)) {
+                            child.material.forEach(mat => { if (mat) mat.side = THREE.DoubleSide; });
+                        } else if (child.material) {
+                            child.material.side = THREE.DoubleSide;
                         }
         
-                        child.geometry.computeBoundingBox();
-                        child.geometry.center(); // Center local geometry origin
+                        if (child.geometry) {
+                            child.geometry.computeBoundingBox();
+                            child.geometry.center();
+                        }
                     }
                 });
         
                 loadedShipModel = obj;
                 loadedShipModel.scale.set(50, 50, 100);
-                loadedShipModel.rotation.y = Math.PI; // Keeps your 180° orientation flip
+                loadedShipModel.rotation.y = Math.PI;
         
-                // Hot-swap existing fallback cones with the multi-colored ship
+                // Hot-swap existing fallback cones safely
                 for (let id in shipMeshes) {
                     if (shipMeshes[id]) {
                         while (shipMeshes[id].children.length > 0) { 
@@ -159,7 +160,6 @@ HTML_CLIENT = """
                 console.error("Failed to load model from jsDelivr:", error);
             }
         );
-
         function createShipMesh(isLocal) {
             const shipGroup = new THREE.Group();
 
