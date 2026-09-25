@@ -717,7 +717,9 @@ function updateParticles() {
 
             // Load external OBJ asset
             if (typeof THREE.OBJLoader !== 'undefined') {
-                const loader = new THREE.OBJLoaderHere is the updated code with key fixes for performance, memory management, and multiplayer entity sync.
+                const loader = new THREE.OBJLoader
+            }
+        }
         function updateParticles() {
             for (let i = trailParticles.length - 1; i >= 0; i--) {
                 const p = trailParticles[i];
