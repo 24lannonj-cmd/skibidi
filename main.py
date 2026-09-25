@@ -215,55 +215,26 @@ HTML_CLIENT = """
         function createShipMesh(isLocal) {
             const group = new THREE.Group();
         
-            // 1. Temporary placeholder geometry (colored cone until model finishes downloading)
+            // 1. Temporary placeholder geometry
             const tempGeo = new THREE.ConeGeometry(5, 15, 8);
             const tempMat = new THREE.MeshBasicMaterial({ color: isLocal ? 0x00ff00 : 0xff0000 });
             const tempMesh = new THREE.Mesh(tempGeo, tempMat);
-            
-            // Rotate temporary cone to point forward along the Z/Y axes
             tempMesh.rotation.x = Math.PI / 2;
             group.add(tempMesh);
         
-            // 2. Load the actual GLTF 3D model
-            const loader = new THREE.GLTFLoader();
-            loader.load(
-                'path/to/ship.gltf', // Replace with your actual model path
-                (gltf) => {
-                    // Remove temporary placeholder
-                    group.remove(tempMesh);
-                    tempGeo.dispose();
-                    tempMat.dispose();
+            // 2. Load OBJ / GLTF model cleanly without forcing solid red
+            if (typeof loadedShipModel !== 'undefined' && loadedShipModel) {
+                group.remove(tempMesh);
+                tempGeo.dispose();
+                tempMat.dispose();
         
-                    const model = gltf.scene;
-        
-                    // Preserve original colors/textures, or apply a clean grey material fallback
-                    model.traverse((child) => {
-                        if (child.isMesh) {
-                            child.castShadow = true;
-                            child.receiveShadow = true;
-        
-                            // If the mesh lacks a material or texture, apply a neutral grey finish
-                            if (!child.material) {
-                                child.material = new THREE.MeshStandardMaterial({
-                                    color: 0x888888,
-                                    metalness: 0.5,
-                                    roughness: 0.4
-                                });
-                            }
-                        }
-                    });
-        
-                    group.add(model);
-                },
-                undefined,
-                (error) => {
-                    console.error('Error loading ship model:', error);
-                }
-            );
-        
-            return group;
-        }
-        
+                const model = loadedShipModel.clone();
+                
+                // Ensure no global red material override is applied
+                model.traverse((child) => {
+                    if (child.isMesh) {
+                        child.castShadow = true;
+                        child.receiveShadow = true;
         const GLOBAL_SEED = 987654321;
         
         function seededRandom(seed) {
@@ -865,36 +836,40 @@ HTML_CLIENT = """
                 let currentSpeed = Math.sqrt(me.vx * me.vx + me.vy * me.vy + me.vz * me.vz);
         
                 // Apply forward engine thrust
+                // Apply forward engine thrust
+                // Apply forward engine thrust
                 if (isThrusting) {
                     if (currentSpeed < maxSpeed) {
                         const baseAccel = isBoosting ? 1.0 : 0.3;
                         const dragFactor = 0.013;
                         const effectiveThrust = baseAccel + (currentSpeed * dragFactor);
-                
-                        // 1. Calculate ideal velocity direction based on current ship angle
+
+                        // --- GRADUAL / SMOOTH VELOCITY BLENDING ---
+                        // Target velocity based on facing angle
                         const targetVx = Math.sin(me.angle) * (currentSpeed + effectiveThrust);
                         const targetVy = -Math.cos(me.angle) * (currentSpeed + effectiveThrust);
-                
-                        // 2. Smoothly blend current velocity toward facing direction (0.15 = grip/responsiveness)
-                        me.vx += (targetVx - me.vx) * 0.15;
-                        me.vy += (targetVy - me.vy) * 0.15;
-                
-                        // Dual Jet Particle Offset (Increased rearOffset to fix issue A)
-                        const rearOffset = 28; // Increased from 12 to clear the ship body
-                        const jetWidth = 4.0;  
-                
+                        
+                        // 0.035 creates a smooth, gentle arc when turning while accelerating (instead of snapping)
+                        const turnGrip = 0.035; 
+                        me.vx += (targetVx - me.vx) * turnGrip;
+                        me.vy += (targetVy - me.vy) * turnGrip;
+                        
+                        // --- DUAL JET ENGINE PARTICLE OFFSETS ---
+                        const rearOffset = 38; // Pushes particles cleanly behind the ship tail
+                        const jetWidth = 14.0;  // Aligns with outer dual thruster nozzles
+        
                         const backX = -Math.sin(me.angle) * rearOffset;
                         const backY = Math.cos(me.angle) * rearOffset;
-                
+        
                         const perpX = Math.cos(me.angle) * jetWidth;
                         const perpY = Math.sin(me.angle) * jetWidth;
-                
+        
                         const leftX = me.x + backX - perpX;
                         const leftY = me.y + backY - perpY;
-                
+        
                         const rightX = me.x + backX + perpX;
                         const rightY = me.y + backY + perpY;
-                
+        
                         if (typeof spawnTrailParticle === 'function') {
                             spawnTrailParticle(leftX, leftY, me.z, me.angle);
                             spawnTrailParticle(rightX, rightY, me.z, me.angle);
@@ -903,7 +878,6 @@ HTML_CLIENT = """
                     
                     currentSpeed = Math.sqrt(me.vx * me.vx + me.vy * me.vy + me.vz * me.vz);
                 }
-        
                 // 4. Clamping & Decay Management
                 if (currentSpeed > maxSpeed) {
                     if (isBoosting) {
