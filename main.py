@@ -16,11 +16,10 @@ HTML_CLIENT = """
 <html>
 <head>
     <title>Infinite Synced Space Sandbox 3D</title>
-    <!-- 1. Load Core Three.js FIRST -->
+    <!-- Three.js Core -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     
-    <!-- 2. Load Loaders AFTER Three.js -->
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/MTLLoader.js"></script>
+    <!-- OBJLoader extension -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js"></script>
 
     <style>
