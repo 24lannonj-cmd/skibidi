@@ -139,11 +139,10 @@ HTML_CLIENT = """
                         child.geometry.center(); // Center local origin
                     }
                 });
-                loadedShipModel.rotation.y = Math.PI; // 180 degree yaw rotation
                 loadedShipModel = obj;
                 loadedShipModel.scale.set(50, 50, 100);
                 console.log("OBJ model loaded successfully!");
-        
+                loadedShipModel.rotation.y = Math.PI; // 180 degree yaw rotation
                 // HOT-SWAP EXISTING CONES SAFELY
                 // Replaces geometry inside active player groups without breaking loop variables
                 for (let id in shipMeshes) {
