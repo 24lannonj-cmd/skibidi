@@ -214,20 +214,22 @@ HTML_CLIENT = """
         // Trigger load
         loadShipAssets();
         function createShipMesh(isLocal) {
-            const shipGroup = new THREE.Group();
-
-            if (loadedShipModel) {
-                const shipInstance = loadedShipModel.clone();
-                shipGroup.add(shipInstance);
-            } else {
-                const tempGeo = new THREE.ConeGeometry(5, 15, 8);
-                const tempMat = new THREE.MeshBasicMaterial({ color: isLocal ? 0x00ff00 : 0xff0000 });
-                const tempMesh = new THREE.Mesh(tempGeo, tempMat);
-                tempMesh.rotation.x = Math.PI / 2;
-                shipGroup.add(tempMesh);
-            }
-
-            return shipGroup;
+            const group = new THREE.Group();
+        
+            // 1. Add a temporary placeholder geometry while the model loads
+            const tempGeo = new THREE.ConeGeometry(5, 15, 8);
+            const tempMat = new THREE.MeshBasicMaterial({ color: isLocal ? 0x00ff00 : 0xff0000 });
+            const tempMesh = new THREE.Mesh(tempGeo, tempMat);
+            group.add(tempMesh);
+        
+            // 2. Load the actual 3D model
+            const loader = new THREE.GLTFLoader();
+            loader.load('path/to/ship.gltf', (gltf) => {
+                group.remove(tempMesh); // Remove placeholder
+                group.add(gltf.scene);  // Add loaded model
+            });
+        
+            return group;
         }
 
         const GLOBAL_SEED = 987654321;
