@@ -905,9 +905,22 @@ HTML_CLIENT = """
                 const p = gameState.players[id];
                 if (!p) continue;
 
-                if (!shipMeshes[id]) {
-                    shipMeshes[id] = createShipMesh(id === localPlayerId);
-                    scene.add(shipMeshes[id]);
+                // Inside your animate() function, right where player meshes are placed/updated:
+                for (let id in players) {
+                    // If the 3D model finished downloading, but this player is still using a fallback cone, remove it!
+                    if (loadedShipModel && shipMeshes[id] && shipMeshes[id].isFallback) {
+                        scene.remove(shipMeshes[id]);
+                        delete shipMeshes[id];
+                    }
+                
+                    // Re-create the ship mesh (it will now grab the loaded 3D model instead of the cone)
+                    if (!shipMeshes[id]) {
+                        shipMeshes[id] = createShipMesh(id === localPlayerId);
+                        scene.add(shipMeshes[id]);
+                    }
+                
+                    // ... your existing position and rotation update code for shipMeshes[id]
+                }
                 }
 
                 if (id === localPlayerId) {
