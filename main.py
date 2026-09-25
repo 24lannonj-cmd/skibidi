@@ -88,9 +88,21 @@ HTML_CLIENT = """
 
     <script>
         // Core Setup
+        
+        // Screen Logger Fallback
+        window.onerror = function(msg, url, line) {
+            let errDiv = document.getElementById('screen-log');
+            if (!errDiv) {
+                errDiv = document.createElement('div');
+                errDiv.id = 'screen-log';
+                errDiv.style.cssText = 'position:fixed; bottom:10px; left:10px; background:rgba(255,0,0,0.85); color:#fff; padding:10px; z-index:9999; font-size:12px; max-width:80%; word-break:break-all; border-radius:5px;';
+                document.body.appendChild(errDiv);
+            }
+            errDiv.innerHTML += `<p style="margin:2px 0;">ERROR: ${msg} (Line ${line})</p>`;
+        };
         const scene = new THREE.Scene();
         scene.fog = new THREE.FogExp2(0x020208, 0.00002);
-
+        
         const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000000);
         const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
         renderer.setSize(window.innerWidth, window.innerHeight);
