@@ -135,7 +135,7 @@ HTML_CLIENT = """
         scene.add(sunLight);
         
 
-        }
+        
         
         let loadedShipModel = null;
 
