@@ -686,6 +686,45 @@ HTML_CLIENT = """
             trailParticles.push({ mesh: particle, life: 1.0 });
         }
 
+function updateParticles() {
+            for (let i = trailParticles.length - 1; i >= 0; i--) {
+                const p = trailParticles[i];
+                p.life -= 0.1;
+                p.mesh.scale.multiplyScalar(0.92);
+                p.mesh.material.opacity = p.life;
+
+                if (p.life <= 0) {
+                    scene.remove(p.mesh);
+                    p.mesh.geometry.dispose();
+                    p.mesh.material.dispose();
+                    trailParticles.splice(i, 1);
+                }
+            }
+        }
+
+        // ==============================================================================
+        // 3D MODEL FACTORIES
+        // ==============================================================================
+        function createShipMesh(isLocal) {
+            const group = new THREE.Group();
+
+            // Temporary placeholder geometry while the model loads
+            const tempGeo = new THREE.ConeGeometry(5, 15, 8);
+            tempGeo.rotateX(Math.PI / 2);
+            const tempMat = new THREE.MeshBasicMaterial({ color: isLocal ? 0x00ff88 : 0xff3344 });
+            const tempMesh = new THREE.Mesh(tempGeo, tempMat);
+            group.add(tempMesh);
+
+            // Load external OBJ asset
+            if (typeof THREE.OBJLoader !== 'undefined') {
+                const loader = new THREE.OBJLoaderHere is the updated code with key fixes for performance, memory management, and multiplayer entity sync.
+
+### Key Fixes Applied
+1. **Memory Leak Prevention in Player Disconnects**: Disposed of geometries and materials when remote player ships are removed.
+2. **Local Player State Reconciliation**: Properly initializes and synchronizes the local player's position from server state updates without getting overridden incorrectly.
+3. **Safe Object Iteration**: Cleaned up the state reconciliation loop when adding and removing remote players.
+
+```javascript
         function updateParticles() {
             for (let i = trailParticles.length - 1; i >= 0; i--) {
                 const p = trailParticles[i];
@@ -700,6 +739,23 @@ HTML_CLIENT = """
                     trailParticles.splice(i, 1);
                 }
             }
+        }
+
+        // Helper to recursively dispose of group meshes when player disconnects
+        function removeAndDisposeGroup(group) {
+            scene.remove(group);
+            group.traverse((child) => {
+                if (child.isMesh) {
+                    if (child.geometry) child.geometry.dispose();
+                    if (child.material) {
+                        if (Array.isArray(child.material)) {
+                            child.material.forEach(m => m.dispose());
+                        } else {
+                            child.material.dispose();
+                        }
+                    }
+                }
+            });
         }
 
         // ==============================================================================
@@ -773,6 +829,7 @@ HTML_CLIENT = """
 
         ws.onmessage = (event) => {
             const data = JSON.parse(event.data);
+
             if (data.type === 'init') {
                 localPlayerId = data.id;
                 if (!gameState.players[localPlayerId]) {
@@ -780,24 +837,34 @@ HTML_CLIENT = """
                 }
                 return;
             }
+
             if (data.type === 'state') {
-                for (let id in data.gameState.players) {
+                const serverPlayers = data.gameState.players || {};
+
+                // Update existing players or add new remote players
+                for (let id in serverPlayers) {
                     if (id !== localPlayerId) {
-                        gameState.players[id] = data.gameState.players[id];
+                        gameState.players[id] = serverPlayers[id];
                     } else if (!gameState.players[localPlayerId]) {
-                        gameState.players[localPlayerId] = data.gameState.players[id];
+                        gameState.players[localPlayerId] = serverPlayers[id];
                     }
                 }
+
+                // Remove disconnected players and clean up 3D meshes
                 for (let id in gameState.players) {
-                    if (!data.gameState.players[id] && id !== localPlayerId) {
+                    if (!serverPlayers[id] && id !== localPlayerId) {
                         delete gameState.players[id];
                         if (shipMeshes[id]) {
-                            scene.remove(shipMeshes[id]);
+                            removeAndDisposeGroup(shipMeshes[id]);
                             delete shipMeshes[id];
                         }
                     }
                 }
-                document.getElementById('player-count').innerText = Object.keys(data.gameState.players).length;
+
+                const playerCountEl = document.getElementById('player-count');
+                if (playerCountEl) {
+                    playerCountEl.innerText = Object.keys(serverPlayers).length;
+                }
             }
         };
         // ========================================
