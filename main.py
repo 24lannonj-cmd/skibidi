@@ -794,19 +794,19 @@ HTML_CLIENT = """
 
         ws.onmessage = (event) => {
             const data = JSON.parse(event.data);
-
+        
             if (data.type === 'init') {
                 localPlayerId = data.id;
+                // Ensure local player state exists immediately upon connection
                 if (!gameState.players[localPlayerId]) {
                     gameState.players[localPlayerId] = { x: 200, y: 0, z: 0, angle: 0, vx: 0, vy: 0, vz: 0 };
                 }
                 return;
             }
-
+        
             if (data.type === 'state') {
-                const serverPlayers = data.gameState.players || {};
-
-                // Update existing players or add new remote players
+                const serverPlayers = data.gameState ? data.gameState.players : {};
+        
                 for (let id in serverPlayers) {
                     if (id !== localPlayerId) {
                         gameState.players[id] = serverPlayers[id];
@@ -814,18 +814,17 @@ HTML_CLIENT = """
                         gameState.players[localPlayerId] = serverPlayers[id];
                     }
                 }
-
-                // Remove disconnected players and clean up 3D meshes
+        
                 for (let id in gameState.players) {
                     if (!serverPlayers[id] && id !== localPlayerId) {
                         delete gameState.players[id];
                         if (shipMeshes[id]) {
-                            removeAndDisposeGroup(shipMeshes[id]);
+                            scene.remove(shipMeshes[id]);
                             delete shipMeshes[id];
                         }
                     }
                 }
-
+        
                 const playerCountEl = document.getElementById('player-count');
                 if (playerCountEl) {
                     playerCountEl.innerText = Object.keys(serverPlayers).length;
