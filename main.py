@@ -871,7 +871,7 @@ HTML_CLIENT = """
                 // Apply forward engine thrust
                 if (isThrusting) {
                     if (currentSpeed < maxSpeed) {
-                        const baseAccel = isBoosting ? 1.0 : 0.3;
+                        const baseAccel = isBoosting ? 10 : 3;
                         const dragFactor = 0.013;
                         const effectiveThrust = baseAccel + (currentSpeed * dragFactor);
         
