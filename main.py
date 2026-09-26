@@ -210,7 +210,7 @@ HTML_CLIENT = """
         loadShipAssets();
         function createShipMesh(isLocal) {
             const group = new THREE.Group();
-        
+            
             // 1. Temporary placeholder geometry
             const tempGeo = new THREE.ConeGeometry(5, 15, 8);
             const tempMat = new THREE.MeshBasicMaterial({ color: isLocal ? 0x00ff00 : 0xff0000 });
@@ -223,7 +223,7 @@ HTML_CLIENT = """
                 group.remove(tempMesh);
                 tempGeo.dispose();
                 tempMat.dispose();
-            }
+
                 const model = loadedShipModel.clone();
                 // Ensure no global red material override is applied
                 model.traverse((child) => {
@@ -235,6 +235,8 @@ HTML_CLIENT = """
                 group.add(model);
             }
 
+            return group;
+        }
         const GLOBAL_SEED = 987654321;
         
         function seededRandom(seed) {
