@@ -999,20 +999,23 @@ HTML_CLIENT = """
             camera.lookAt(lookTarget);
         }
 
-        function animate() {
+function animate() {
             requestAnimationFrame(animate);
-            updateLocalPhysics();
-            updateParticles();
 
-            stationMesh.rotation.y += 0.005;
-
-            // Smooth planet spin
-            for (let key in planetObjects) {
-                if (planetObjects[key] && planetObjects[key].mesh) {
-                    planetObjects[key].mesh.rotation.y += 0.001;
-                }
+            // 1. Run local movement & physics
+            if (typeof updateLocalPhysics === 'function') {
+                updateLocalPhysics();
             }
 
+            // 2. Update particles & station rotation
+            if (typeof updateParticles === 'function') {
+                updateParticles();
+            }
+            if (typeof stationMesh !== 'undefined' && stationMesh) {
+                stationMesh.rotation.y += 0.005;
+            }
+
+            // 3. Update player ship meshes in 3D scene
             for (let id in gameState.players) {
                 const p = gameState.players[id];
                 if (!p) continue;
@@ -1027,8 +1030,7 @@ HTML_CLIENT = """
                     shipMeshes[id].position.y = p.z || 0;
                     shipMeshes[id].position.z = p.y;
                     shipMeshes[id].rotation.y = -p.angle;
-                } 
-                else {
+                } else {
                     shipMeshes[id].position.x += (p.x - shipMeshes[id].position.x) * 0.25;
                     shipMeshes[id].position.y += ((p.z || 0) - shipMeshes[id].position.y) * 0.25;
                     shipMeshes[id].position.z += (p.y - shipMeshes[id].position.z) * 0.25;
@@ -1036,33 +1038,16 @@ HTML_CLIENT = """
                 }
             }
 
+            // 4. Update HUD, Camera, and Infinite World Clusters
             const me = gameState.players[localPlayerId];
-            if (me && shipMeshes[localPlayerId]) {
+            if (me) {
                 if (typeof updateCameraPosition === 'function') updateCameraPosition(me);
-
                 if (typeof updateStarPool === 'function') updateStarPool(me.x, me.z || 0, me.y);
                 if (typeof updatePlanetClusters === 'function') updatePlanetClusters(me.x, me.z || 0, me.y);
                 if (typeof updatePlanetPointer === 'function') updatePlanetPointer(me.x, me.z || 0, me.y);
 
-                // --- SAFE ORIGIN LINE UPDATE ---
-                if (typeof originLine !== 'undefined' && originLine && originLine.geometry && originLine.geometry.attributes.position) {
-                    const posAttr = originLine.geometry.attributes.position;
-                    const posArr = posAttr.array;
-
-                    if (posArr && posArr.length >= 6) {
-                        posArr[0] = 0;     
-                        posArr[1] = 0;     
-                        posArr[2] = 0;     
-                        posArr[3] = me.x;  
-                        posArr[4] = me.z || 0; 
-                        posArr[5] = me.y;  
-                        posAttr.needsUpdate = true;
-                    }
-                }
-
-                // --- SAFE HUD / UI UPDATES ---
-                const spd = Math.sqrt(me.vx * me.vx + me.vy * me.vy + (me.vz || 0) * (me.vz || 0)).toFixed(1);
-                
+                // Safe UI Updates
+                const spd = Math.sqrt((me.vx||0)*(me.vx||0) + (me.vy||0)*(me.vy||0) + (me.vz||0)*(me.vz||0)).toFixed(1);
                 const elX = document.getElementById('pos-x');
                 const elZ = document.getElementById('pos-z');
                 const elY = document.getElementById('pos-y');
@@ -1074,12 +1059,14 @@ HTML_CLIENT = """
                 if (elSpeed) elSpeed.innerText = spd;
             }
 
-            if (typeof renderer !== 'undefined' && renderer && scene && camera) {
+            // 5. Render Scene
+            if (renderer && scene && camera) {
                 renderer.render(scene, camera);
             }
-
-        animate();
         }
+
+        // KICK OFF THE ANIMATION LOOP IMMEDIATELY
+        animate();
     </script>
 </body>
 </html>
