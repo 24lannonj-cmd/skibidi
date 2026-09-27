@@ -1,3 +1,9 @@
+import asyncio
+import json
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.responses import HTMLResponse
+
+app = FastAPI()
 HTML_CLIENT = """
 <!DOCTYPE html>
 <html>
