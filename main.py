@@ -365,43 +365,48 @@ HTML_CLIENT = """
         // ==========================================================================
         const arrowEl = document.getElementById('nav-arrow');
         const textEl = document.getElementById('nav-text');
-
+        
         function updatePlanetPointer(playerX, playerY, playerZ) {
             let nearest = null;
             let minDist = Infinity;
-
+        
             for (let key in planetObjects) {
                 const p = planetObjects[key];
                 const dx = p.x - playerX;
                 const dy = p.z - playerY;
                 const dz = p.y - playerZ;
                 const dist = Math.sqrt(dx * dx + dy * dy + dz * dz) - p.radius;
-
+        
                 if (dist < minDist) {
                     minDist = dist;
                     nearest = p;
                 }
             }
-
+        
             if (!nearest) {
                 arrowEl.style.display = 'none';
                 textEl.style.display = 'none';
                 document.getElementById('nearest-dist').innerText = 'None';
                 return;
             }
-
-            document.getElementById('nearest-dist').innerText = Math.max(0, Math.round(minDist)) + 'm';
-
+        
+            // Format the distance string nicely
+            const currentDistText = Math.max(0, Math.round(minDist)) + 'm';
+            document.getElementById('nearest-dist').innerText = currentDistText;
+            
+            // FIX: Update the floating UI label text from "TARGET" to the actual distance
+            textEl.innerText = currentDistText;
+        
             const screenPos = new THREE.Vector3(nearest.x, nearest.z, nearest.y).project(camera);
             const w2 = window.innerWidth / 2;
             const h2 = window.innerHeight / 2;
             
             let sx = screenPos.x * w2 + w2;
             let sy = -screenPos.y * h2 + h2;
-
+        
             const margin = 50;
             let edgeX = sx, edgeY = sy;
-
+        
             if (screenPos.z > 1 || sx < margin || sx > window.innerWidth - margin || sy < margin || sy > window.innerHeight - margin) {
                 const dx = (sx - w2) || 1;
                 const dy = (sy - h2) || 1;
@@ -410,13 +415,13 @@ HTML_CLIENT = """
                 edgeX = w2 + Math.cos(angle) * scale;
                 edgeY = h2 + Math.sin(angle) * scale;
             }
-
+        
             const angle = Math.atan2(sy - edgeY, sx - edgeX) + Math.PI / 2;
             arrowEl.style.display = 'block';
             arrowEl.style.left = (edgeX - 12) + 'px';
             arrowEl.style.top = (edgeY - 12) + 'px';
             arrowEl.style.transform = `rotate(${angle}rad)`;
-
+        
             textEl.style.display = 'block';
             textEl.style.left = (edgeX - 20) + 'px';
             textEl.style.top = (edgeY + 15) + 'px';
@@ -636,91 +641,87 @@ HTML_CLIENT = """
         // ==========================================================================
         function updateLocalPhysics() {
             if (!localPlayerId || !gameState.players[localPlayerId]) return;
-
+        
             const me = gameState.players[localPlayerId];
             me.vx ??= 0;
             me.vy ??= 0;
             me.vz ??= 0;
-
+        
             const thrust = keys['w'] || keys['arrowup'];
             const boost = keys['shift'];
             const brake = keys['s'] || keys['arrowdown'];
-
+            
+            // Track if a vertical key is currently actively held down
+            const verticalThrust = keys['x'] || keys['z'];
+        
             // Steering
             if (keys['a'] || keys['arrowleft']) me.angle -= 0.03;
             if (keys['d'] || keys['arrowright']) me.angle += 0.03;
-
-            // Vertical
+        
+            // Vertical acceleration tracking
             if (keys['x']) me.vz += 0.85;
             if (keys['z']) me.vz -= 0.85;
-
-            // Braking
+        
+            // Braking controls
             if (brake) {
                 me.vx *= 0.92;
                 me.vy *= 0.92;
                 me.vz *= 0.92;
             }
-
-            // Acceleration
+        
+            // Main Engine Forward Acceleration
             const maxSpeed = boost ? 100 : 50;
             let speed = Math.hypot(me.vx, me.vy, me.vz);
-
+        
             if (thrust && speed < maxSpeed) {
                 const accel = boost ? 1.0 : 0.3;
                 const targetVx = Math.sin(me.angle) * (speed + accel);
                 const targetVy = -Math.cos(me.angle) * (speed + accel);
-
+        
                 const grip = 0.04;
                 me.vx += (targetVx - me.vx) * grip;
                 me.vy += (targetVy - me.vy) * grip;
-
-                // ===== CORRECTED PARTICLE OFFSETS =====
-                // Engine is at position Z=14, so particles spawn BEHIND
-                // Left jet offset: -sin(angle) * 40 for rear, -cos(angle) * 16 for left
-                // Right jet offset: -sin(angle) * 40 for rear, +cos(angle) * 16 for right
-
+        
+                // Particle generation system code...
                 const rearDist = 40;
                 const jetWidth = 18;
-
                 const backX = -Math.sin(me.angle) * rearDist;
                 const backY = Math.cos(me.angle) * rearDist;
-
                 const sideX = Math.cos(me.angle) * jetWidth;
                 const sideY = Math.sin(me.angle) * jetWidth;
-
-                const leftX = me.x + backX - sideX;
-                const leftY = me.y + backY - sideY;
-
-                const rightX = me.x + backX + sideX;
-                const rightY = me.y + backY + sideY;
-
-                spawnTrailParticle(leftX, leftY, me.z - 3);
-                spawnTrailParticle(rightX, rightY, me.z - 3);
+        
+                spawnTrailParticle(me.x + backX - sideX, me.y + backY - sideY, me.z - 3);
+                spawnTrailParticle(me.x + backX + sideX, me.y + backY + sideY, me.z - 3);
             }
-
+        
             speed = Math.hypot(me.vx, me.vy, me.vz);
-
-            // Velocity clamping
+        
+            // Velocity clamping limits
             if (speed > maxSpeed) {
                 const scale = maxSpeed / speed;
                 me.vx *= scale;
                 me.vy *= scale;
                 me.vz *= scale;
             }
-
-            // Natural decay
+        
+            // Natural drag decay handling
             if (!thrust) {
                 me.vx *= 0.988;
                 me.vy *= 0.988;
-                me.vz *= 0.950;
             }
-
-            // Position update
+            
+            // FIX: Apply a sharp deceleration decay to vertical velocity if x/z keys are not actively held down
+            if (!verticalThrust) {
+                me.vz *= 0.850; 
+                if (Math.abs(me.vz) < 0.01) me.vz = 0; // complete stabilization stop
+            }
+        
+            // Position updates and collision parsing logic continues...
             me.x += me.vx;
             me.y += me.vy;
             me.z += me.vz;
-
-            // Collision with planets
+        
+            // (Remaining collision with planets & websocket synchronization code continues as normal below)
             for (let key in planetObjects) {
                 const planet = planetObjects[key];
                 const dx = me.x - planet.x;
@@ -728,16 +729,10 @@ HTML_CLIENT = """
                 const dz = me.y - planet.y;
                 const dist = Math.hypot(dx, dy, dz);
                 const minDist = planet.radius + 12;
-
+        
                 if (dist < minDist && dist > 0.1) {
-                    const nx = dx / dist;
-                    const ny = dy / dist;
-                    const nz = dz / dist;
-
-                    me.x += nx * (minDist - dist);
-                    me.z += ny * (minDist - dist);
-                    me.y += nz * (minDist - dist);
-
+                    const nx = dx / dist; const ny = dy / dist; const nz = dz / dist;
+                    me.x += nx * (minDist - dist); me.z += ny * (minDist - dist); me.y += nz * (minDist - dist);
                     const dot = me.vx * nx + me.vz * ny + me.vy * nz;
                     if (dot < 0) {
                         me.vx = (me.vx - 2 * dot * nx) * 0.6;
@@ -746,18 +741,14 @@ HTML_CLIENT = """
                     }
                 }
             }
-
-            // Sync to server
+        
             if (ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({
-                    type: 'sync',
-                    x: me.x, y: me.y, z: me.z,
-                    angle: me.angle,
+                    type: 'sync', x: me.x, y: me.y, z: me.z, angle: me.angle,
                     vx: me.vx, vy: me.vy, vz: me.vz
                 }));
             }
         }
-
         // ==========================================================================
         // CAMERA
         // ==========================================================================
