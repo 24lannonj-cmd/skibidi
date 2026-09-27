@@ -516,67 +516,126 @@ HTML_CLIENT = """
         // ==========================================================================
         // SHIP MODELS
         // ==========================================================================
+        const objLoader = new THREE.OBJLoader();
+        
+        // PASTE YOUR CONVERTED GOOGLE DRIVE DOWNLOAD LINK BELOW:
+        const SHIP_MODEL_URL = "https://raw.githubusercontent.com/24lannonj-cmd/skibidi/refs/heads/main/ship.obj";
+        
+        // Async loader block to grab your file structure
+        objLoader.load(
+            SHIP_MODEL_URL,
+            function (obj) {
+                console.log("Custom ship.obj successfully fetched from Google Drive!");
+                
+                // Cache the model base globally
+                loadedShipModel = obj;
+                
+                // Traverse the children parts to apply nice spaceship materials
+                loadedShipModel.traverse(function (child) {
+                    if (child.isMesh) {
+                        child.material = new THREE.MeshStandardMaterial({
+                            color: 0x00ffff,
+                            roughness: 0.2,
+                            metalness: 0.8,
+                            emissive: 0x003344,
+                            emissiveIntensity: 0.2
+                        });
+                        child.castShadow = true;
+                        child.receiveShadow = true;
+                    }
+                });
+            },
+            function (xhr) {
+                // Tracks data download steps in browser console
+                console.log((xhr.loaded / xhr.total * 100) + '% loaded');
+            },
+            function (error) {
+                console.error("Failed to load model from Google Drive. Verify sharing options are public.", error);
+            }
+        );
+        
         function createShipMesh(isLocal) {
-            const group = new THREE.Group();
-
+            const parentContainerGroup = new THREE.Group();
+        
+            // FALLBACK GEOMETRY: Used as a placeholder while Google Drive completes downloading
+            const proceduralConeFallback = new THREE.Group();
             const hullGeo = new THREE.ConeGeometry(8, 24, 6);
             const hullMat = new THREE.MeshStandardMaterial({
                 color: isLocal ? 0x00ff88 : 0xff3344,
                 roughness: 0.3,
-                metalness: 0.7,
-                emissive: isLocal ? 0x00aa44 : 0x552222,
-                emissiveIntensity: 0.3
+                metalness: 0.7
             });
             const hull = new THREE.Mesh(hullGeo, hullMat);
             hull.rotation.x = -Math.PI / 2;
-            group.add(hull);
-
-            // Engine glow
+            proceduralConeFallback.add(hull);
+        
+            // Engine thruster visual tail
             const engineGeo = new THREE.CylinderGeometry(2.5, 0, 12, 8);
-            const engineMat = new THREE.MeshBasicMaterial({
-                color: 0xff5500,
-                transparent: true,
-                opacity: 0.8
-            });
+            const engineMat = new THREE.MeshBasicMaterial({ color: 0xff5500, transparent: true, opacity: 0.8 });
             const engine = new THREE.Mesh(engineGeo, engineMat);
             engine.rotation.x = -Math.PI / 2;
             engine.position.z = 14;
-            group.add(engine);
-
-            return group;
+            proceduralConeFallback.add(engine);
+        
+            // Attach fallback to container immediately
+            proceduralConeFallback.name = "fallbackMesh";
+            parentContainerGroup.add(proceduralConeFallback);
+        
+            // Async Check: If the model has already downloaded, append it immediately
+            if (loadedShipModel) {
+                applyCustomObjAsset(parentContainerGroup, isLocal);
+            }
+        
+            return parentContainerGroup;
         }
-
+        
+        // Function that clones your model mesh and replaces the temporary placeholder shapes
+        function applyCustomObjAsset(container, isLocal) {
+            const fallbackMesh = container.getObjectByName("fallbackMesh");
+            if (fallbackMesh) container.remove(fallbackMesh); // Strip away the cone structures
+        
+            // Clone the mesh template so multiple instances/players can render it concurrently
+            const shipClone = loadedShipModel.clone();
+            
+            // Scale modifier adjustment. If your model imports too small/large, adjust these values!
+            shipClone.scale.set(1.5, 1.5, 1.5);
+            
+            // Rotate model forward to face your forward momentum tracking
+            shipClone.rotation.y = Math.PI; 
+        
+            // Apply color differences for local player versus online lobby opponents
+            shipClone.traverse(function (child) {
+                if (child.isMesh) {
+                    child.material = child.material.clone();
+                    child.material.color.setHex(isLocal ? 0x00ff88 : 0xff3344);
+                }
+            });
+        
+            container.add(shipClone);
+        }
+        
         // ==========================================================================
         // STATION
         // ==========================================================================
         function createStation() {
             const group = new THREE.Group();
-
             const ringGeo = new THREE.TorusGeometry(80, 6, 16, 100);
             const ringMat = new THREE.MeshStandardMaterial({
-                color: 0x00ffff,
-                metalness: 0.9,
-                roughness: 0.2,
-                emissive: 0x0099ff,
-                emissiveIntensity: 0.5
+                color: 0x00ffff, metalness: 0.9, roughness: 0.2, emissive: 0x0099ff, emissiveIntensity: 0.5
             });
             const ring = new THREE.Mesh(ringGeo, ringMat);
             ring.rotation.x = Math.PI / 2;
             group.add(ring);
-
+        
             const coreGeo = new THREE.SphereGeometry(25, 20, 20);
             const coreMat = new THREE.MeshStandardMaterial({
-                color: 0x2244aa,
-                metalness: 0.5,
-                emissive: 0x114488,
-                emissiveIntensity: 0.6
+                color: 0x2244aa, metalness: 0.5, emissive: 0x114488, emissiveIntensity: 0.6
             });
             const core = new THREE.Mesh(coreGeo, coreMat);
             group.add(core);
-
+        
             return group;
         }
-
         const stationMesh = createStation();
         scene.add(stationMesh);
 
