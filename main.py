@@ -747,8 +747,8 @@ HTML_CLIENT = """
                 
                 // Reverse / Braking key (S)
                 if (keys['ArrowDown'] || keys['s'] || keys['S']) {
-                    me.vx *= 0.90;
-                    me.vy *= 0.90;
+                    me.vx *= 0.95;
+                    me.vy *= 0.95;
                     me.vz *= 0.90;
                 }
         
@@ -756,48 +756,32 @@ HTML_CLIENT = """
                 const maxSpeed = isBoosting ? 100 : 50;
                 let currentSpeed = Math.sqrt(me.vx * me.vx + me.vy * me.vy + me.vz * me.vz);
         
-                // Apply forward engine thrust
+                // Apply forward engine thrust unconditionally when thrusting
                 if (isThrusting) {
-                    // Apply thrust only if we aren't exceeding target speed limit
-                    if (currentSpeed < maxSpeed) {
-                        const baseAccel = isBoosting ? 1.0 : 0.3;
-                        const dragFactor = 0.013;
-                        const effectiveThrust = baseAccel + (currentSpeed * dragFactor);
-                        
-                        me.vx += Math.sin(me.angle) * effectiveThrust;
-                        me.vy -= Math.cos(me.angle) * effectiveThrust;
-                        
-                        // Spawn engine particles while accelerating
-                        spawnTrailParticle(me.x, me.y, me.z, me.angle);
-                    }
+                    const baseAccel = isBoosting ? 1.0 : 0.4;
+                    const dragFactor = 0.013;
+                    const effectiveThrust = baseAccel + (currentSpeed * dragFactor);
                     
-                    // Recalculate speed after thrusting
-                    currentSpeed = Math.sqrt(me.vx * me.vx + me.vy * me.vy + me.vz * me.vz);
+                    // Add thrust in the current facing direction
+                    me.vx += Math.sin(me.angle) * effectiveThrust;
+                    me.vy -= Math.cos(me.angle) * effectiveThrust;
+                    
+                    // Spawn engine particles while accelerating
+                    spawnTrailParticle(me.x, me.y, me.z, me.angle);
                 }
+        
+                // Recalculate total speed after applying thrust/inputs
+                currentSpeed = Math.sqrt(me.vx * me.vx + me.vy * me.vy + me.vz * me.vz);
         
                 // 4. Clamping & Decay Management
                 if (currentSpeed > maxSpeed) {
-                    if (isBoosting) {
-                        // Lock strictly at 100 m/s when holding Shift + W
-                        const scale = maxSpeed / currentSpeed;
-                        me.vx *= scale;
-                        me.vy *= scale;
-                        me.vz *= scale;
-                    } else {
-                        // Smoothly bleed off excess speed down to 50 over ~1.5 seconds when releasing Shift
-                        const decayRate = 0.99;
-                        me.vx *= decayRate;
-                        me.vy *= decayRate;
-                        me.vz *= decayRate;
-                    }
-                } else if (isThrusting && !isBoosting && currentSpeed > 49.0) {
-                    // Hard lock to EXACTLY 50.0 when cruising at top non-boost speed (stops HUD flicker)
-                    const scale = 50 / currentSpeed;
+                    // Scale velocity vector back to maxSpeed without changing movement direction
+                    const scale = maxSpeed / currentSpeed;
                     me.vx *= scale;
                     me.vy *= scale;
                     me.vz *= scale;
                 } else if (!isThrusting) {
-                    // Standard space friction (only applies when coasting / not holding thrust)
+                    // Standard space friction (only applies when coasting)
                     me.vx *= 0.987;
                     me.vy *= 0.987;
                     me.vz *= 0.950;
