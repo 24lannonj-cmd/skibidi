@@ -2,6 +2,7 @@ import asyncio
 import json
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 
 app = FastAPI()
 HTML_CLIENT = """
@@ -517,9 +518,9 @@ HTML_CLIENT = """
         // SHIP MODELS (FIXED: RELIABLE ASSET HANDLING)
         // ==========================================================================
         const SHIP_MODEL_URL = "https://cdn.jsdelivr.net/gh/24lannonj-cmd/skibidi@main/ship.glb";
-; 
         
-        const gltfLoader = new GLTFLoader(); // Fixed!
+        const gltfLoader = new THREE.GLTFLoader();
+
 
         
         // Asynchronously fetch the compressed .glb asset package
@@ -824,9 +825,6 @@ HTML_CLIENT = """
         // ==========================================================================
         // ANIMATION LOOP
         // ==========================================================================
-        // ==========================================================================
-        // ANIMATION LOOP (UPDATED FOR DYNAMIC GLTF RENDERING)
-        // ==========================================================================
         function animate() {
             requestAnimationFrame(animate);
         
@@ -923,7 +921,7 @@ class ConnectionManager:
                 pass
 
 manager = ConnectionManager()
-
+app.mount("/static", StaticFiles(directory="."), name="static")
 @app.get("/")
 async def get():
     return HTMLResponse(HTML_CLIENT)
