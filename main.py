@@ -514,51 +514,32 @@ HTML_CLIENT = """
         }
 
         // ==========================================================================
-        // SHIP MODELS
+        // SHIP MODELS (FIXED: RELIABLE ASSET HANDLING)
         // ==========================================================================
         const objLoader = new THREE.OBJLoader();
         
-        // PASTE YOUR CONVERTED GOOGLE DRIVE DOWNLOAD LINK BELOW:
-        const SHIP_MODEL_URL = "https://raw.githubusercontent.com/24lannonj-cmd/skibidi/refs/heads/main/ship.obj";
-        
-        // Async loader block to grab your file structure
+        // Download the mesh dynamically
         objLoader.load(
             SHIP_MODEL_URL,
             function (obj) {
-                console.log("Custom ship.obj successfully fetched from Google Drive!");
-                
-                // Cache the model base globally
+                console.log("Custom ship.obj successfully downloaded!");
                 loadedShipModel = obj;
-                
-                // Traverse the children parts to apply nice spaceship materials
-                loadedShipModel.traverse(function (child) {
-                    if (child.isMesh) {
-                        child.material = new THREE.MeshStandardMaterial({
-                            color: 0x00ffff,
-                            roughness: 0.2,
-                            metalness: 0.8,
-                            emissive: 0x003344,
-                            emissiveIntensity: 0.2
-                        });
-                        child.castShadow = true;
-                        child.receiveShadow = true;
-                    }
-                });
             },
             function (xhr) {
-                // Tracks data download steps in browser console
                 console.log((xhr.loaded / xhr.total * 100) + '% loaded');
             },
             function (error) {
-                console.error("Failed to load model from Google Drive. Verify sharing options are public.", error);
+                console.error("Error loading model data from mesh delivery engine:", error);
             }
         );
         
         function createShipMesh(isLocal) {
             const parentContainerGroup = new THREE.Group();
         
-            // FALLBACK GEOMETRY: Used as a placeholder while Google Drive completes downloading
+            // Setup the fallback shape container so you aren't flying completely invisible
             const proceduralConeFallback = new THREE.Group();
+            proceduralConeFallback.name = "fallbackMesh";
+            
             const hullGeo = new THREE.ConeGeometry(8, 24, 6);
             const hullMat = new THREE.MeshStandardMaterial({
                 color: isLocal ? 0x00ff88 : 0xff3344,
@@ -569,7 +550,6 @@ HTML_CLIENT = """
             hull.rotation.x = -Math.PI / 2;
             proceduralConeFallback.add(hull);
         
-            // Engine thruster visual tail
             const engineGeo = new THREE.CylinderGeometry(2.5, 0, 12, 8);
             const engineMat = new THREE.MeshBasicMaterial({ color: 0xff5500, transparent: true, opacity: 0.8 });
             const engine = new THREE.Mesh(engineGeo, engineMat);
@@ -577,11 +557,9 @@ HTML_CLIENT = """
             engine.position.z = 14;
             proceduralConeFallback.add(engine);
         
-            // Attach fallback to container immediately
-            proceduralConeFallback.name = "fallbackMesh";
             parentContainerGroup.add(proceduralConeFallback);
         
-            // Async Check: If the model has already downloaded, append it immediately
+            // If it's already cached, apply it instantly
             if (loadedShipModel) {
                 applyCustomObjAsset(parentContainerGroup, isLocal);
             }
@@ -589,31 +567,33 @@ HTML_CLIENT = """
             return parentContainerGroup;
         }
         
-        // Function that clones your model mesh and replaces the temporary placeholder shapes
         function applyCustomObjAsset(container, isLocal) {
             const fallbackMesh = container.getObjectByName("fallbackMesh");
-            if (fallbackMesh) container.remove(fallbackMesh); // Strip away the cone structures
+            if (fallbackMesh) container.remove(fallbackMesh); 
         
-            // Clone the mesh template so multiple instances/players can render it concurrently
             const shipClone = loadedShipModel.clone();
             
-            // Scale modifier adjustment. If your model imports too small/large, adjust these values!
-            shipClone.scale.set(1.5, 1.5, 1.5);
+            // Massive scale upgrade to compensate for microscopic Blender export geometry sizes
+            shipClone.scale.set(200, 200, 200);
+            shipClone.name = "customAssetMesh";
             
-            // Rotate model forward to face your forward momentum tracking
+            // Flips the model around so the front tip points towards where you steer
             shipClone.rotation.y = Math.PI; 
         
-            // Apply color differences for local player versus online lobby opponents
             shipClone.traverse(function (child) {
                 if (child.isMesh) {
-                    child.material = child.material.clone();
-                    child.material.color.setHex(isLocal ? 0x00ff88 : 0xff3344);
+                    child.material = new THREE.MeshStandardMaterial({
+                        color: isLocal ? 0x00ff88 : 0xff3344,
+                        roughness: 0.2,
+                        metalness: 0.8
+                    });
+                    child.castShadow = true;
+                    child.receiveShadow = true;
                 }
             });
         
             container.add(shipClone);
         }
-        
         // ==========================================================================
         // STATION
         // ==========================================================================
