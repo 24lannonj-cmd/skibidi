@@ -10,7 +10,7 @@ HTML_CLIENT = """
 <head>
     <title>Infinite Synced Space Sandbox 3D</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three-gltf-loader@1.111.0/index.min.js"></script>  
+    <script src="https://cdn.jsdelivr.net/npm/gltf-loader@1.0.0/index.min.js"></script>  
     <style>
         * { margin: 0; padding: 0; }
         body { 
