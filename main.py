@@ -69,6 +69,15 @@ HTML_CLIENT = """
             white-space: nowrap;
             display: none;
         }
+        #item-menu {
+            position: absolute;
+            top: -15px;
+            left: 15px;
+            background: rgba(10,15,30,0.85); 
+            padding: 15px;
+            border: 1px solid #ffffff;
+            border-radius: 8px;
+        }
     </style>
 </head>
 <body>
@@ -82,7 +91,7 @@ HTML_CLIENT = """
         <p>Controls: WASD (Forward/Turn), X/Z (Ascend/Descend)</p>
         <p>Shift to boost</p>
     </div>
-
+    <div id='item-menu'></div>
     <div id="nav-arrow"></div>
     <div id="nav-text">TARGET</div>
 
@@ -683,6 +692,7 @@ HTML_CLIENT = """
         let gameState = { players: {} };
         const shipMeshes = {};
         const keys = {};
+        let inventory = {'iron':0, 'gold':0, 'silver':0}
 
         window.addEventListener('keydown', e => { keys[e.key] = true; });
         window.addEventListener('keyup', e => { keys[e.key] = false; });
