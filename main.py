@@ -10,7 +10,7 @@ HTML_CLIENT = """
 <head>
     <title>Infinite Synced Space Sandbox 3D</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js"></script>
+    <script src="https://jsdelivr.net"></script>    
     <style>
         * { margin: 0; padding: 0; }
         body { 
@@ -516,29 +516,34 @@ HTML_CLIENT = """
         // ==========================================================================
         // SHIP MODELS (FIXED: RELIABLE ASSET HANDLING)
         // ==========================================================================
-        const objLoader = new THREE.OBJLoader();
+        const SHIP_MODEL_URL = "https://jsdelivr.net"; 
         
-        // Download the mesh dynamically
-        objLoader.load(
+        const gltfLoader = new THREE.GLTFLoader();
+        
+        // Asynchronously fetch the compressed .glb asset package
+        gltfLoader.load(
             SHIP_MODEL_URL,
-            function (obj) {
-                console.log("Custom ship.obj successfully downloaded!");
-                loadedShipModel = obj;
+            function (gltf) {
+                console.log("🚀 GLB Ship Asset package downloaded successfully!");
+                // The core visual mesh group sits inside gltf.scene
+                loadedShipModel = gltf.scene; 
             },
             function (xhr) {
-                console.log((xhr.loaded / xhr.total * 100) + '% loaded');
+                if (xhr.total > 0) {
+                    console.log('Downloading model asset: ' + (xhr.loaded / xhr.total * 100).toFixed(0) + '%');
+                }
             },
             function (error) {
-                console.error("Error loading model data from mesh delivery engine:", error);
+                console.error("Critical GLTF loader file delivery error:", error);
             }
         );
         
         function createShipMesh(isLocal) {
             const parentContainerGroup = new THREE.Group();
         
-            // Setup the fallback shape container so you aren't flying completely invisible
-            const proceduralConeFallback = new THREE.Group();
-            proceduralConeFallback.name = "fallbackMesh";
+            // Setup the backup fallback box shape so you aren't flying completely invisible while downloading
+            const proceduralFallback = new THREE.Group();
+            proceduralFallback.name = "fallbackMesh";
             
             const hullGeo = new THREE.ConeGeometry(8, 24, 6);
             const hullMat = new THREE.MeshStandardMaterial({
@@ -548,40 +553,43 @@ HTML_CLIENT = """
             });
             const hull = new THREE.Mesh(hullGeo, hullMat);
             hull.rotation.x = -Math.PI / 2;
-            proceduralConeFallback.add(hull);
+            proceduralFallback.add(hull);
         
             const engineGeo = new THREE.CylinderGeometry(2.5, 0, 12, 8);
             const engineMat = new THREE.MeshBasicMaterial({ color: 0xff5500, transparent: true, opacity: 0.8 });
             const engine = new THREE.Mesh(engineGeo, engineMat);
             engine.rotation.x = -Math.PI / 2;
             engine.position.z = 14;
-            proceduralConeFallback.add(engine);
+            proceduralFallback.add(engine);
         
-            parentContainerGroup.add(proceduralConeFallback);
+            parentContainerGroup.add(proceduralFallback);
         
-            // If it's already cached, apply it instantly
+            // If network finished fetching early, inject asset right away
             if (loadedShipModel) {
-                applyCustomObjAsset(parentContainerGroup, isLocal);
+                applyCustomGlbAsset(parentContainerGroup, isLocal);
             }
         
             return parentContainerGroup;
         }
         
-        function applyCustomObjAsset(container, isLocal) {
+        function applyCustomGlbAsset(container, isLocal) {
             const fallbackMesh = container.getObjectByName("fallbackMesh");
             if (fallbackMesh) container.remove(fallbackMesh); 
         
             const shipClone = loadedShipModel.clone();
-            
-            // Massive scale upgrade to compensate for microscopic Blender export geometry sizes
-            shipClone.scale.set(200, 200, 200);
             shipClone.name = "customAssetMesh";
             
-            // Flips the model around so the front tip points towards where you steer
+            // ADJUST THESE SCALES: GLB scale sizes vary drastically depending on your Blender export settings
+            // If your ship looks completely invisible or massive, adjust these numbers down to (1, 1, 1) or up to (50, 50, 50)
+            shipClone.scale.set(5, 5, 5); 
+            
+            // Rotate the asset model by 180 degrees so the cockpit nose faces forwards along the steering angle
             shipClone.rotation.y = Math.PI; 
         
+            // Look inside the GLB layout to map lighting and colors to the individual sub-meshes
             shipClone.traverse(function (child) {
                 if (child.isMesh) {
+                    // Keep your cool laser green or crimson target tracking colors
                     child.material = new THREE.MeshStandardMaterial({
                         color: isLocal ? 0x00ff88 : 0xff3344,
                         roughness: 0.2,
@@ -814,26 +822,34 @@ HTML_CLIENT = """
         // ==========================================================================
         // ANIMATION LOOP
         // ==========================================================================
+        // ==========================================================================
+        // ANIMATION LOOP (UPDATED FOR DYNAMIC GLTF RENDERING)
+        // ==========================================================================
         function animate() {
             requestAnimationFrame(animate);
-
-            // Physics & input
+        
+            // Update game logic mechanics loops
             updateLocalPhysics();
             updateParticles();
-
-            // Station rotation
+        
+            // Rotational matrix calculation for standard starbases
             stationMesh.rotation.y += 0.003;
-
-            // Player visuals
+        
+            // Player mesh assignment processing loops
             for (let id in gameState.players) {
                 const p = gameState.players[id];
                 if (!p) continue;
-
+        
                 if (!shipMeshes[id]) {
                     shipMeshes[id] = createShipMesh(id === localPlayerId);
                     scene.add(shipMeshes[id]);
                 }
-
+        
+                // HOT-SWAP BLOCK: Replaces fallback box geometry with your custom .glb asset upon download completion
+                if (loadedShipModel && shipMeshes[id].getObjectByName("fallbackMesh") && !shipMeshes[id].getObjectByName("customAssetMesh")) {
+                    applyCustomGlbAsset(shipMeshes[id], id === localPlayerId);
+                }
+        
                 if (id === localPlayerId) {
                     shipMeshes[id].position.set(p.x, p.z || 0, p.y);
                     shipMeshes[id].rotation.y = -p.angle;
@@ -845,23 +861,24 @@ HTML_CLIENT = """
                     mesh.rotation.y += (-p.angle - mesh.rotation.y) * 0.2;
                 }
             }
-
-            // World updates
+        
+            // Client interface UI tracker calculations
             const me = gameState.players[localPlayerId];
             if (me) {
                 updateCamera(me);
                 updatePlanetClusters(me.x, me.z || 0, me.y);
                 updatePlanetPointer(me.x, me.z || 0, me.y);
-
+        
                 const speed = Math.hypot(me.vx || 0, me.vy || 0, me.vz || 0).toFixed(1);
                 document.getElementById('pos-x').innerText = Math.round(me.x);
                 document.getElementById('pos-y').innerText = Math.round(me.y);
                 document.getElementById('pos-z').innerText = Math.round(me.z || 0);
                 document.getElementById('speed').innerText = speed;
             }
-
+        
             renderer.render(scene, camera);
         }
+
 
         animate();
     </script>
