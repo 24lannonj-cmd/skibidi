@@ -71,7 +71,7 @@ HTML_CLIENT = """
         }
         #item-menu {
             position: absolute;
-            top: -15px;
+            top: 300px;
             left: 15px;
             background: rgba(10,15,30,0.85); 
             padding: 15px;
