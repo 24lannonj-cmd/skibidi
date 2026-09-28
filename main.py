@@ -292,7 +292,7 @@ HTML_CLIENT = """
         // ==============================================================================
         // PLANET CLUSTER SYSTEM MANAGER
         // ==============================================================================
-        const CLUSTER_GRID_SIZE = 200000;
+        const CLUSTER_GRID_SIZE = 100000;
         const CLUSTER_DRAW_RADIUS = 1; 
         const UNLOAD_DISTANCE_THRESHOLD = 350000; 
         const planetObjects = {};
