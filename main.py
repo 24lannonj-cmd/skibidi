@@ -71,11 +71,11 @@ HTML_CLIENT = """
         }
         #item-menu {
             position: absolute;
-            top: 300px;
-            left: 15px;
+            top: 15px;
+            right: 15px;
             background: rgba(10,15,30,0.85); 
-            padding: 15px;
-            border: 1px solid #ffffff;
+            padding: 10px;
+            border: 2px solid #ffffff;
             border-radius: 8px;
         }
     </style>
