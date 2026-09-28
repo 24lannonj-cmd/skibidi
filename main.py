@@ -4547,7 +4547,6 @@ class ConnectionManager:
                 pass
 
 manager = ConnectionManager()
-app.mount("/static", StaticFiles(directory="."), name="static")
 @app.get("/")
 async def get():
     return HTMLResponse(HTML_CLIENT)
