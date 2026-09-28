@@ -91,7 +91,13 @@ HTML_CLIENT = """
         <p>Controls: WASD (Forward/Turn), X/Z (Ascend/Descend)</p>
         <p>Shift to boost</p>
     </div>
-    <div id='item-menu'></div>
+    <div id='item-menu'>
+        <p> Iron: <span id='iron' class='stat'>0</span><p>
+        <p> Gold: <span id='gold' class='stat'>0</span><p>
+        <p> Silver: <span id='silver' class='stat'>0</span><p>
+    </div>
+    
+    
     <div id="nav-arrow"></div>
     <div id="nav-text">TARGET</div>
 
