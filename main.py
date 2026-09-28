@@ -516,7 +516,8 @@ HTML_CLIENT = """
         // ==========================================================================
         // SHIP MODELS (FIXED: RELIABLE ASSET HANDLING)
         // ==========================================================================
-        const SHIP_MODEL_URL = "https://jsdelivr.net"; 
+        const SHIP_MODEL_URL = "https://cdn.jsdelivr.net/gh/24lannonj-cmd/skibidi@main/ship.glb";
+; 
         
         const gltfLoader = new THREE.GLTFLoader();
         
