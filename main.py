@@ -10,7 +10,7 @@ HTML_CLIENT = """
 <head>
     <title>Infinite Synced Space Sandbox 3D</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://jsdelivr.net"></script>    
+    <script src="https://jsdelivr.net"></script>  
     <style>
         * { margin: 0; padding: 0; }
         body { 
@@ -519,7 +519,8 @@ HTML_CLIENT = """
         const SHIP_MODEL_URL = "https://cdn.jsdelivr.net/gh/24lannonj-cmd/skibidi@main/ship.glb";
 ; 
         
-        const gltfLoader = new THREE.GLTFLoader();
+        const gltfLoader = new GLTFLoader(); // Fixed!
+
         
         // Asynchronously fetch the compressed .glb asset package
         gltfLoader.load(
