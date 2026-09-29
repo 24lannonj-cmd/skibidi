@@ -738,25 +738,28 @@ HTML_CLIENT = """
             }
         };
         // =========================================
-        // ITEMS
+        // ITEMS & INVENTORY
         // =========================================
         function updateUI() {
-            document.getElementById('iron').textContent = iron;
-            document.getElementById('gold').textContent = gold;
-            document.getElementById('silver').textContent = silver;
+            document.getElementById('iron').textContent = inventory.iron;
+            document.getElementById('gold').textContent = inventory.gold;
+            document.getElementById('silver').textContent = inventory.silver;
         }
-        
-        // Inside your game loop or keypress listener:
-        if (keys['m']) {
-            iron += 5;
-            updateUI(); // Refreshes the menu display
-        }
+
         // =========================================
-        // PHYSICS
-        // ========================================
+        // PHYSICS & INPUT
+        // =========================================
         function updateLocalPhysics() {
             if (localPlayerId && gameState.players[localPlayerId]) {
                 const me = gameState.players[localPlayerId];
+
+                // Handle Inventory Key (M)
+                if (keys['m'] || keys['M']) {
+                    inventory.iron += 5;
+                    updateUI();
+                    keys['m'] = false; 
+                    keys['M'] = false;
+                }
                 
                 // 1. Sanitize velocity vectors
                 if (!me.vx || isNaN(me.vx)) me.vx = 0;
