@@ -808,7 +808,7 @@ HTML_CLIENT = """
             });
         }
 
-        setInterval(saveProgress, 30000);
+        setInterval(saveProgress, 1000);
         animate();
     </script>
 </body>
