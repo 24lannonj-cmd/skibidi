@@ -148,7 +148,7 @@ HTML_CLIENT = """
             <input type="text" id="username" placeholder="Username" style="width: 90%; padding: 8px; margin: 8px 0; background: #111; color: #00ffff; border: 1px solid #00ffff; border-radius: 4px;" />
             <input type="password" id="password" placeholder="Password" style="width: 90%; padding: 8px; margin: 8px 0; background: #111; color: #00ffff; border: 1px solid #00ffff; border-radius: 4px;" />
             <p id="auth-msg" style="color: #ff3344; font-size: 12px; margin: 5px 0;"></p>
-            <div style="display: flex; justify-content: space-around; margin-top: 10px;">
+            <div style="display: flex; justify-style: space-around; margin-top: 10px;">
                 <button onclick="handleLogin()" style="padding: 8px 15px; background: #00ffff; color: #000; font-weight: bold; border: none; border-radius: 4px; cursor: pointer;">Login</button>
                 <button onclick="handleRegister()" style="padding: 8px 15px; background: #00ffff; color: #000; font-weight: bold; border: none; border-radius: 4px; cursor: pointer;">Register</button>
             </div>
@@ -225,6 +225,15 @@ HTML_CLIENT = """
         const sunLight = new THREE.DirectionalLight(0xffffff, 2.5);
         sunLight.position.set(50000, 100000, 50000);
         scene.add(sunLight);
+
+        // --- WHITE ORIGIN POINTER LINE ---
+        const originLineGeo = new THREE.BufferGeometry().setFromPoints([
+            new THREE.Vector3(0, 0, 0),
+            new THREE.Vector3(0, 0, 0)
+        ]);
+        const originLineMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.6 });
+        const originLine = new THREE.Line(originLineGeo, originLineMat);
+        scene.add(originLine);
 
         const GLOBAL_SEED = 987654321;
 
@@ -766,6 +775,16 @@ HTML_CLIENT = """
 
             const me = gameState.players[localPlayerId];
             if (me && shipMeshes[localPlayerId]) {
+                // Update origin line dynamically from player position to (0, 0, 0)
+                const linePositions = originLine.geometry.attributes.position.array;
+                linePositions[0] = me.x;
+                linePositions[1] = me.z || 0;
+                linePositions[2] = me.y;
+                linePositions[3] = 0;
+                linePositions[4] = 0;
+                linePositions[5] = 0;
+                originLine.geometry.attributes.position.needsUpdate = true;
+
                 updateCameraPosition(me);
                 updatePlanetClusters(me.x, me.z || 0, me.y);
                 updatePlanetPointer(me.x, me.z || 0, me.y);
