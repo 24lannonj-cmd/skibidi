@@ -841,12 +841,16 @@ HTML_CLIENT = """
         // Toggle Trade Window (e.g., pressing 'T')
         function toggleTradeMenu() {
             const tradeMenu = document.getElementById('trade-menu');
+            const me = gameState.players[localPlayerId];
             
-            // Check distance to station at (0,0,0) using player/ship position
+            // Safety check in case player state hasn't initialized yet
+            if (!me) return;
+        
+            // Check distance to station at (0,0,0) using active local player position
             const distance = Math.sqrt(
-                player.position.x ** 2 + 
-                player.position.y ** 2 + 
-                player.position.z ** 2
+                me.x ** 2 + 
+                me.y ** 2 + 
+                (me.z || 0) ** 2
             );
         
             if (!isTrading) {
