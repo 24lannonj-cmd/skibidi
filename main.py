@@ -786,6 +786,7 @@ HTML_CLIENT = """
                 const me = gameState.players[localPlayerId];
                 // Inside updateLocalPhysics():
                 if (keys['i'] || keys['I']) {
+                    keys['i'] = false;
                     toggleItemMenu();
                     keys['i'] = false; // Prevent flickering across frames
                     keys['I'] = false;
