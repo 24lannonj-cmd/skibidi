@@ -778,19 +778,18 @@ HTML_CLIENT = """
             }
         }
         
-        // Inside updateLocalPhysics():
-        if (keys['i'] || keys['I']) {
-            toggleItemMenu();
-            keys['i'] = false; // Prevent flickering across frames
-            keys['I'] = false;
-        }
         // =========================================
         // PHYSICS & INPUT
         // =========================================
         function updateLocalPhysics() {
             if (localPlayerId && gameState.players[localPlayerId]) {
                 const me = gameState.players[localPlayerId];
-
+                // Inside updateLocalPhysics():
+                if (keys['i'] || keys['I']) {
+                    toggleItemMenu();
+                    keys['i'] = false; // Prevent flickering across frames
+                    keys['I'] = false;
+                }
                 // Handle Inventory Key (M)
                 if (keys['m'] || keys['M']) {
                     inventory.iron += 5;
