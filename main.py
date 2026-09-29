@@ -103,6 +103,40 @@ HTML_CLIENT = """
     </style>
 </head>
 <body>
+    <!-- Trade Window Overlay -->
+    <div id="trade-menu" style="display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(15, 20, 30, 0.95); border: 2px solid #00d2ff; border-radius: 10px; padding: 20px; color: #fff; font-family: sans-serif; box-shadow: 0 0 20px rgba(0, 210, 255, 0.3); min-width: 320px; z-index: 1000;">
+        <h2 style="margin-top: 0; text-align: center; color: #00d2ff; text-transform: uppercase; letter-spacing: 2px;">Station Trading Hub</h2>
+        <p style="text-align: center; font-size: 0.9em; color: #aaa; margin-bottom: 20px;">Docked at Station (0, 0, 0)</p>
+    
+        <!-- Iron Trade Row -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; background: rgba(255, 255, 255, 0.05); padding: 8px 12px; border-radius: 6px;">
+            <span style="font-weight: bold; width: 70px;">Iron</span>
+            <div>
+                <button onclick="buyResource('iron')" style="background: #28a745; color: white; border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer; margin-right: 5px;">Buy (10$)</button>
+                <button onclick="sellResource('iron')" style="background: #dc3545; color: white; border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer;">Sell (8$)</button>
+            </div>
+        </div>
+    
+        <!-- Silver Trade Row -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; background: rgba(255, 255, 255, 0.05); padding: 8px 12px; border-radius: 6px;">
+            <span style="font-weight: bold; width: 70px;">Silver</span>
+            <div>
+                <button onclick="buyResource('silver')" style="background: #28a745; color: white; border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer; margin-right: 5px;">Buy (25$)</button>
+                <button onclick="sellResource('silver')" style="background: #dc3545; color: white; border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer;">Sell (20$)</button>
+            </div>
+        </div>
+    
+        <!-- Gold Trade Row -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; background: rgba(255, 255, 255, 0.05); padding: 8px 12px; border-radius: 6px;">
+            <span style="font-weight: bold; width: 70px;">Gold</span>
+            <div>
+                <button onclick="buyResource('gold')" style="background: #28a745; color: white; border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer; margin-right: 5px;">Buy (50$)</button>
+                <button onclick="sellResource('gold')" style="background: #dc3545; color: white; border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer;">Sell (40$)</button>
+            </div>
+        </div>
+    
+        <p style="text-align: center; font-size: 0.8em; color: #888;">Press <kbd>T</kbd> or <kbd>ESC</kbd> to exit trade hub</p>
+    </div>
     <div id="ui">
         <h3 style="margin-top: 0; color: #00ffff; text-shadow: 0 0 8px #00ffff;">3D Infinite Warp Flight Deck</h3>
         <p>Position: X <span id="pos-x" class="stat">0</span> | Y <span id="pos-y" class="stat">0</span> | Z <span id="pos-z" class="stat">0</span><p>
@@ -791,6 +825,81 @@ HTML_CLIENT = """
     window.addEventListener('keyup', e => {
         keys[e.key] = false;
     });
+
+        // =========================================
+        // TRADING AND VALUES
+        // =========================================
+        const tradePrices = {
+            iron:   { buy: 10, sell: 7 },
+            gold:   { buy: 50, sell: 35 },
+            silver: { buy: 25, sell: 15 }
+        };
+        // Track trading state and max station interaction distance
+        let isTrading = false;
+        const TRADE_DISTANCE = 50; // Max distance from (0,0,0) to trade
+        
+        // Toggle Trade Window (e.g., pressing 'T')
+        function toggleTradeMenu() {
+            const tradeMenu = document.getElementById('trade-menu');
+            
+            // Check distance to station at (0,0,0) using player/ship position
+            const distance = Math.sqrt(
+                player.position.x ** 2 + 
+                player.position.y ** 2 + 
+                player.position.z ** 2
+            );
+        
+            if (!isTrading) {
+                // Only open if close enough to the station
+                if (distance <= TRADE_DISTANCE) {
+                    isTrading = true;
+                    tradeMenu.style.display = 'block';
+                } else {
+                    console.log("Too far from station to trade!");
+                }
+            } else {
+                // Close menu if open
+                isTrading = false;
+                tradeMenu.style.display = 'none';
+            }
+        }
+        
+        // Key listener for 'T' key and 'Escape'
+        window.addEventListener('keydown', (e) => {
+            if (e.key.toLowerCase() === 't') {
+                toggleTradeMenu();
+            } else if (e.key === 'Escape' && isTrading) {
+                isTrading = false;
+                document.getElementById('trade-menu').style.display = 'none';
+            }
+        });
+        // Buy Resource Function
+        function buyResource(resource) {
+            const config = tradePrices[resource];
+            if (!config) return;
+        
+            if (inventory.money >= config.buy) {
+                inventory.money -= config.buy;
+                inventory[resource] += 1;
+                updateUI();
+            } else {
+                console.log("Not enough money to buy " + resource);
+            }
+        }
+        
+        // Sell Resource Function
+        function sellResource(resource) {
+            const config = tradePrices[resource];
+            if (!config) return;
+        
+            if (inventory[resource] >= 1) {
+                inventory[resource] -= 1;
+                inventory.money += config.sell;
+                updateUI();
+            } else {
+                console.log("Not enough " + resource + " to sell");
+            }
+        }
         // =========================================
         // PHYSICS & INPUT
         // =========================================
