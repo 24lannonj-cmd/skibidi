@@ -721,9 +721,8 @@ HTML_CLIENT = """
         let localPlayerId = null;
         let gameState = { players: {} };
         const shipMeshes = {};
-        const keys = {};
-        let money = 0
-        let inventory = {'iron':0, 'gold':0, 'silver':0}
+        const keys = {}
+        let inventory = {'iron':0, 'gold':0, 'silver':0, 'money':0}
 
         window.addEventListener('keydown', e => { keys[e.key] = true; });
         window.addEventListener('keyup', e => { keys[e.key] = false; });
@@ -801,7 +800,7 @@ HTML_CLIENT = """
                 // Handle Inventory Key (M)
                 if (keys['m'] || keys['M']) {
                     inventory.iron += 5;
-                    money += 5;
+                    inventory.money += 5;
                     updateUI();
                     keys['m'] = false; 
                     keys['M'] = false;
