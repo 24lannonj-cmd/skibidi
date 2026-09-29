@@ -765,6 +765,7 @@ HTML_CLIENT = """
         // ITEMS & INVENTORY
         // =========================================
         function updateUI() {
+            document.getElementById('money').textContent = inventory.money;
             document.getElementById('iron').textContent = inventory.iron;
             document.getElementById('gold').textContent = inventory.gold;
             document.getElementById('silver').textContent = inventory.silver;
