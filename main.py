@@ -137,6 +137,20 @@ HTML_CLIENT = """
     </style>
 </head>
 <body>
+    <!-- Login / Register Overlay -->
+    <div id="auth-overlay" style="position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(5, 10, 20, 0.9); z-index: 2000; display: flex; justify-content: center; align-items: center; flex-direction: column;">
+        <div style="background: rgba(15, 20, 35, 0.95); border: 2px solid #00ffff; padding: 25px; border-radius: 8px; text-align: center; width: 280px;">
+            <h2 style="color: #00ffff; margin-top: 0;">PILOT LOGIN</h2>
+            <input type="text" id="username" placeholder="Username" style="width: 90%; padding: 8px; margin: 8px 0; background: #111; color: #00ffff; border: 1px solid #00ffff; border-radius: 4px;" />
+            <input type="password" id="password" placeholder="Password" style="width: 90%; padding: 8px; margin: 8px 0; background: #111; color: #00ffff; border: 1px solid #00ffff; border-radius: 4px;" />
+            <p id="auth-msg" style="color: #ff3344; font-size: 12px; margin: 5px 0;"></p>
+            <div style="display: flex; justify-content: space-around; margin-top: 10px;">
+                <button onclick="handleLogin()" style="padding: 8px 15px; background: #00ffff; color: #000; font-weight: bold; border: none; border-radius: 4px; cursor: pointer;">Login</button>
+                <button onclick="handleRegister()" style="padding: 8px 15px; background: #00ffff; color: #000; font-weight: bold; border: none; border-radius: 4px; cursor: pointer;">Register</button>
+            </div>
+        </div>
+    </div>
+    
     <!-- Trade Window Overlay -->
     <div id="trade-menu" style="display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(15, 20, 30, 0.95); border: 2px solid #00d2ff; border-radius: 10px; padding: 20px; color: #fff; font-family: sans-serif; box-shadow: 0 0 20px rgba(0, 210, 255, 0.3); min-width: 320px; z-index: 1000;">
         <h2 style="margin-top: 0; text-align: center; color: #00d2ff; text-transform: uppercase; letter-spacing: 2px;">Station Trading Hub</h2>
@@ -1147,53 +1161,65 @@ HTML_CLIENT = """
         // =========================================
         let currentUser = null;
 
-        async function login(username, password) {
-            const response = await fetch('/api/login', {
+        async function handleRegister() {
+            const u = document.getElementById('username').value;
+            const p = document.getElementById('password').value;
+            const res = await fetch('/api/register', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username, password })
+                body: JSON.stringify({ username: u, password: p })
             });
-            
-            const data = await response.json();
-            if (data.userId) {
-                currentUser = data;
-                console.log("Loaded save state:", currentUser.saveData);
-            }
-            return data;
+            const data = await res.json();
+            document.getElementById('auth-msg').innerText = data.error ? data.error : "Registered! Click Login.";
         }
 
-        async function saveProgress(currentPos, currentMoney, currentInventory) {
-            if (!currentUser) return;
-
-            const saveData = {
-                userId: currentUser.userId,
-                position: currentPos,
-                money: currentMoney,
-                inventory: currentInventory
-            };
-
-            const response = await fetch('/api/save', {
+        async function handleLogin() {
+            const u = document.getElementById('username').value;
+            const p = document.getElementById('password').value;
+            const res = await fetch('/api/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(saveData)
+                body: JSON.stringify({ username: u, password: p })
             });
+            const data = await res.json();
+            
+            if (data.error) {
+                document.getElementById('auth-msg').innerText = data.error;
+            } else {
+                currentUser = data;
+                document.getElementById('auth-overlay').style.display = 'none';
 
-            const result = await response.json();
-            console.log("Save status:", result);
+                // Load database position and inventory into local state
+                if (gameState.players[localPlayerId]) {
+                    gameState.players[localPlayerId].x = data.saveData.position.x;
+                    gameState.players[localPlayerId].y = data.saveData.position.y;
+                    gameState.players[localPlayerId].z = data.saveData.position.z;
+                }
+                inventory = data.saveData.inventory;
+                inventory.money = data.saveData.money;
+                updateUI();
+            }
+        }
+
+        async function saveProgress() {
+            if (!currentUser || !localPlayerId || !gameState.players[localPlayerId]) return;
+
+            const me = gameState.players[localPlayerId];
+            await fetch('/api/save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    userId: currentUser.userId,
+                    position: { x: me.x, y: me.y, z: me.z },
+                    money: inventory.money,
+                    inventory: inventory
+                })
+            });
+            console.log("Game saved automatically");
         }
 
         // Auto-save every 30 seconds
-        setInterval(() => {
-            if (currentUser && localPlayerId && gameState.players[localPlayerId]) {
-                const me = gameState.players[localPlayerId];
-                saveProgress(
-                    { x: me.x, y: me.y, z: me.z },
-                    inventory.money,
-                    inventory
-                );
-            }
-        }, 30000);
-        
+        setInterval(saveProgress, 30000);
         animate();
     </script>
 </body>
