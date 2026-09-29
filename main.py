@@ -5,12 +5,15 @@ import asyncio
 import json
 import sqlite3
 import hashlib
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
+import anyio
 
-app = FastAPI()
-
+# ==============================================================================
+# DATABASE SETUP
+# ==============================================================================
 def init_db():
     conn = sqlite3.connect("game.db")
     cursor = conn.cursor()
@@ -48,6 +51,28 @@ def hash_password(password: str) -> str:
 active_connections: list[WebSocket] = []
 game_state = {"players": {}}
 
+# Broadcast game updates 30 times a second
+async def broadcast_loop():
+    while True:
+        await asyncio.sleep(1 / 30)
+        if active_connections:
+            message = json.dumps({"type": "state", "gameState": game_state})
+            for connection in list(active_connections):
+                try:
+                    await connection.send_text(message)
+                except Exception:
+                    if connection in active_connections:
+                        active_connections.remove(connection)
+
+# Lifespan Context Manager (replaces deprecated @app.on_event)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    task = asyncio.create_task(broadcast_loop())
+    yield
+    task.cancel()
+
+app = FastAPI(lifespan=lifespan)
+
 # ==============================================================================
 # 1. FRONTEND HTML & CSS LAYOUT
 # ==============================================================================
@@ -58,8 +83,6 @@ HTML_CLIENT = """
     <title>Infinite Synced Space Sandbox 3D</title>
     <!-- Core Three.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/MTLLoader.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js"></script>
 
     <style>
         body { 
@@ -148,7 +171,7 @@ HTML_CLIENT = """
             <input type="text" id="username" placeholder="Username" style="width: 90%; padding: 8px; margin: 8px 0; background: #111; color: #00ffff; border: 1px solid #00ffff; border-radius: 4px;" />
             <input type="password" id="password" placeholder="Password" style="width: 90%; padding: 8px; margin: 8px 0; background: #111; color: #00ffff; border: 1px solid #00ffff; border-radius: 4px;" />
             <p id="auth-msg" style="color: #ff3344; font-size: 12px; margin: 5px 0;"></p>
-            <div style="display: flex; justify-style: space-around; margin-top: 10px;">
+            <div style="display: flex; justify-content: space-around; margin-top: 10px;">
                 <button onclick="handleLogin()" style="padding: 8px 15px; background: #00ffff; color: #000; font-weight: bold; border: none; border-radius: 4px; cursor: pointer;">Login</button>
                 <button onclick="handleRegister()" style="padding: 8px 15px; background: #00ffff; color: #000; font-weight: bold; border: none; border-radius: 4px; cursor: pointer;">Register</button>
             </div>
@@ -627,6 +650,7 @@ HTML_CLIENT = """
                 inventory.money -= tradePrices[res].buy;
                 inventory[res] = (inventory[res] || 0) + 1;
                 updateUI();
+                saveProgress();
             }
         }
         
@@ -635,6 +659,7 @@ HTML_CLIENT = """
                 inventory[res] -= 1;
                 inventory.money += tradePrices[res].sell;
                 updateUI();
+                saveProgress();
             }
         }
 
@@ -867,7 +892,10 @@ HTML_CLIENT = """
             });
         }
 
-        setInterval(saveProgress, 1000);
+        // Periodically save state every 10 seconds
+        setInterval(saveProgress, 10000);
+        window.addEventListener('beforeunload', saveProgress);
+        
         animate();
     </script>
 </body>
@@ -887,13 +915,12 @@ class SaveRequest(BaseModel):
     money: int
     inventory: dict
 
-@app.post("/api/register")
-async def register(data: AuthRequest):
+def db_register(username, password):
     conn = sqlite3.connect("game.db")
     cursor = conn.cursor()
     try:
-        hashed_pass = hash_password(data.password)
-        cursor.execute("INSERT INTO users (username, password) VALUES (?, ?)", (data.username, hashed_pass))
+        hashed_pass = hash_password(password)
+        cursor.execute("INSERT INTO users (username, password) VALUES (?, ?)", (username, hashed_pass))
         user_id = cursor.lastrowid
         cursor.execute("INSERT INTO player_data (user_id) VALUES (?)", (user_id,))
         conn.commit()
@@ -903,20 +930,23 @@ async def register(data: AuthRequest):
     finally:
         conn.close()
 
-@app.post("/api/login")
-async def login(data: AuthRequest):
+@app.post("/api/register")
+async def register(data: AuthRequest):
+    return await anyio.to_thread.run_sync(db_register, data.username, data.password)
+
+def db_login(username, password):
     conn = sqlite3.connect("game.db")
     cursor = conn.cursor()
-    hashed_pass = hash_password(data.password)
+    hashed_pass = hash_password(password)
     
-    cursor.execute("SELECT id, username FROM users WHERE username = ? AND password = ?", (data.username, hashed_pass))
+    cursor.execute("SELECT id, username FROM users WHERE username = ? AND password = ?", (username, hashed_pass))
     user = cursor.fetchone()
     
     if not user:
         conn.close()
         return {"error": "Invalid username or password"}
     
-    user_id, username = user
+    user_id, uname = user
     cursor.execute("SELECT x, y, z, money, inventory FROM player_data WHERE user_id = ?", (user_id,))
     row = cursor.fetchone()
     conn.close()
@@ -924,7 +954,7 @@ async def login(data: AuthRequest):
     return {
         "success": True,
         "userId": user_id,
-        "username": username,
+        "username": uname,
         "saveData": {
             "position": {"x": row[0], "y": row[1], "z": row[2]},
             "money": row[3],
@@ -932,8 +962,11 @@ async def login(data: AuthRequest):
         }
     }
 
-@app.post("/api/save")
-async def save_game(data: SaveRequest):
+@app.post("/api/login")
+async def login(data: AuthRequest):
+    return await anyio.to_thread.run_sync(db_login, data.username, data.password)
+
+def db_save(data: SaveRequest):
     conn = sqlite3.connect("game.db")
     cursor = conn.cursor()
     cursor.execute("""
@@ -951,6 +984,10 @@ async def save_game(data: SaveRequest):
     conn.commit()
     conn.close()
     return {"success": True}
+
+@app.post("/api/save")
+async def save_game(data: SaveRequest):
+    return await anyio.to_thread.run_sync(db_save, data)
 
 @app.get("/")
 async def get():
@@ -979,24 +1016,10 @@ async def websocket_endpoint(websocket: WebSocket):
                     p["vx"] = payload.get("vx", p["vx"])
                     p["vy"] = payload.get("vy", p["vy"])
                     p["vz"] = payload.get("vz", p["vz"])
-    except WebSocketDisconnect:
+    except (WebSocketDisconnect, Exception):
+        pass
+    finally:
         if websocket in active_connections:
             active_connections.remove(websocket)
         if player_id in game_state["players"]:
             del game_state["players"][player_id]
-
-async def broadcast_loop():
-    while True:
-        await asyncio.sleep(1 / 30)
-        if active_connections:
-            message = json.dumps({"type": "state", "gameState": game_state})
-            for connection in list(active_connections):
-                try:
-                    await connection.send_text(message)
-                except Exception:
-                    if connection in active_connections:
-                        active_connections.remove(connection)
-
-@app.on_event("startup")
-async def startup_event():
-    asyncio.create_task(broadcast_loop())
