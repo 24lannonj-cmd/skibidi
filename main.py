@@ -302,56 +302,44 @@ HTML_CLIENT = """
         const sharedSphereGeom = new THREE.SphereGeometry(1, 32, 32);
 
         function createSystemCluster(cx, cy, cz) {
-            const clusterKey = `${cx},${cy},${cz}`;
-            let seed = (cx * 73856093) ^ (cy * 19349663) ^ (cz * 83492791) ^ GLOBAL_SEED;
-
-            if (seededRandom(seed) > 0.50) return;
-
-            seed += 10;
-            const systemCenterX = (cx + 0.2 + seededRandom(seed) * 0.6) * CLUSTER_GRID_SIZE;
-            seed += 20;
-            const systemCenterY = (cy + 0.2 + seededRandom(seed) * 0.6) * CLUSTER_GRID_SIZE;
-            seed += 30;
-            const systemCenterZ = (cz + 0.2 + seededRandom(seed) * 0.6) * CLUSTER_GRID_SIZE;
-
-            seed += 40;
-            const planetCount = 2 + Math.floor(seededRandom(seed) * 2);
-
             for (let p = 0; p < planetCount; p++) {
-                const pKey = `${clusterKey}_p${p}`;
-                if (planetObjects[pKey] !== undefined) continue;
-
-                seed += 100 + p * 50;
-                const angle = seededRandom(seed) * Math.PI * 2;
-                seed += 101 + p * 50;
-                const clusterOffsetDist = 40000 + seededRandom(seed) * 40000;
-                seed += 102 + p * 50;
-                const altOffset = (seededRandom(seed) - 0.5) * 20000;
-
-                const px = systemCenterX + Math.cos(angle) * clusterOffsetDist;
-                const py = systemCenterY + Math.sin(angle) * clusterOffsetDist;
-                const pz = systemCenterZ + altOffset;
-
-                seed += 103 + p * 50;
-                const radius = 6000 + seededRandom(seed) * 9000;
-
-                const textures = generatePlanetTextures(seed);
-                const mat = new THREE.MeshStandardMaterial({ 
-                    map: textures.colorTex,
-                    roughness: textures.isLava ? 0.4 : 0.7,
-                    metalness: textures.isLava ? 0.3 : 0.1,
-                    emissiveMap: textures.isLava ? textures.colorTex : null,
-                    emissive: textures.isLava ? 0xff4400 : 0x000000,
-                    emissiveIntensity: textures.isLava ? 0.8 : 0.0
-                });
-
-                const mesh = new THREE.Mesh(sharedSphereGeom, mat);
-                mesh.scale.set(radius, radius, radius);
-                mesh.position.set(px, pz, py);
-                scene.add(mesh);
-
-                planetObjects[pKey] = { mesh, x: px, y: py, z: pz, radius, clusterKey, seed };
-            }
+            const pKey = `${clusterKey}_p${p}`;
+            if (planetObjects[pKey] !== undefined) continue;
+        
+            seed += 100 + p * 50;
+            const angle = seededRandom(seed) * Math.PI * 2;
+            
+            seed += 103 + p * 50;
+            const radius = 6000 + seededRandom(seed) * 9000;
+        
+            // Fixed: Each planet gets its own orbital band (e.g., Planet 0: 45k-65k, Planet 1: 95k-115k, Planet 2: 145k-165k)
+            seed += 101 + p * 50;
+            const minOrbit = 45000 + (p * 50000); 
+            const clusterOffsetDist = minOrbit + seededRandom(seed) * 20000;
+        
+            seed += 102 + p * 50;
+            const altOffset = (seededRandom(seed) - 0.5) * 10000;
+        
+            const px = systemCenterX + Math.cos(angle) * clusterOffsetDist;
+            const py = systemCenterY + Math.sin(angle) * clusterOffsetDist;
+            const pz = systemCenterZ + altOffset;
+        
+            const textures = generatePlanetTextures(seed);
+            const mat = new THREE.MeshStandardMaterial({ 
+                map: textures.colorTex,
+                roughness: textures.isLava ? 0.4 : 0.7,
+                metalness: textures.isLava ? 0.3 : 0.1,
+                emissiveMap: textures.isLava ? textures.colorTex : null,
+                emissive: textures.isLava ? 0xff4400 : 0x000000,
+                emissiveIntensity: textures.isLava ? 0.8 : 0.0
+            });
+        
+            const mesh = new THREE.Mesh(sharedSphereGeom, mat);
+            mesh.scale.set(radius, radius, radius);
+            mesh.position.set(px, pz, py);
+            scene.add(mesh);
+        
+            planetObjects[pKey] = { mesh, x: px, y: py, z: pz, radius, clusterKey, seed };
         }
 
         function updatePlanetClusters(playerX, playerY, playerZ) {
@@ -628,7 +616,9 @@ HTML_CLIENT = """
                 updateUI();
             }
         }
-
+        // ===========================================
+        // PHYSICS
+        // ===========================================
         function updateLocalPhysics() {
             if (localPlayerId && gameState.players[localPlayerId]) {
                 const me = gameState.players[localPlayerId];
@@ -666,7 +656,48 @@ HTML_CLIENT = """
                     me.vx *= 0.987; me.vy *= 0.987; me.vz *= 0.950;
                 }
         
-                me.x += me.vx; me.y += me.vy; me.z += me.vz;
+                // Apply movement
+                me.x += me.vx; 
+                me.y += me.vy; 
+                me.z += me.vz;
+        
+                // --- PLANET COLLISION DETECTION ---
+                const SHIP_PADDING = 20; // Collision threshold around ship
+                for (let key in planetObjects) {
+                    const planet = planetObjects[key];
+                    if (!planet) continue;
+        
+                    const dx = me.x - planet.x;
+                    const dy = me.y - planet.y;
+                    const dz = (me.z || 0) - planet.z;
+                    const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+                    const minDist = planet.radius + SHIP_PADDING;
+        
+                    if (dist < minDist && dist > 0) {
+                        // Calculate unit normal vector pointing out from planet center
+                        const nx = dx / dist;
+                        const ny = dy / dist;
+                        const nz = dz / dist;
+        
+                        // Push ship outside planet radius
+                        me.x = planet.x + nx * minDist;
+                        me.y = planet.y + ny * minDist;
+                        me.z = planet.z + nz * minDist;
+        
+                        // Bounce & kill velocity towards planet center
+                        const dot = me.vx * nx + me.vy * ny + me.vz * nz;
+                        if (dot < 0) {
+                            me.vx -= 1.4 * dot * nx;
+                            me.vy -= 1.4 * dot * ny;
+                            me.vz -= 1.4 * dot * nz;
+                            
+                            // Friction damping on collision surface
+                            me.vx *= 0.7;
+                            me.vy *= 0.7;
+                            me.vz *= 0.7;
+                        }
+                    }
+                }
         
                 if (ws.readyState === WebSocket.OPEN) {
                     ws.send(JSON.stringify({ 
