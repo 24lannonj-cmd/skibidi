@@ -115,6 +115,7 @@ HTML_CLIENT = """
     </div>
    <button id="toggle-menu-btn" onclick="toggleItemMenu()">🎒 Inventory (I)</button>
     <div id='item-menu'>
+        <p> Money: <span id='money' class='stat'>0</span><p>
         <p> Iron: <span id='iron' class='stat'>0</span><p>
         <p> Gold: <span id='gold' class='stat'>0</span><p>
         <p> Silver: <span id='silver' class='stat'>0</span><p>
@@ -721,6 +722,7 @@ HTML_CLIENT = """
         let gameState = { players: {} };
         const shipMeshes = {};
         const keys = {};
+        let money = 0
         let inventory = {'iron':0, 'gold':0, 'silver':0}
 
         window.addEventListener('keydown', e => { keys[e.key] = true; });
@@ -799,6 +801,7 @@ HTML_CLIENT = """
                 // Handle Inventory Key (M)
                 if (keys['m'] || keys['M']) {
                     inventory.iron += 5;
+                    money += 5;
                     updateUI();
                     keys['m'] = false; 
                     keys['M'] = false;
