@@ -740,7 +740,17 @@ HTML_CLIENT = """
         // =========================================
         // ITEMS
         // =========================================
-        if (keys['m']) iron += 5
+        function updateUI() {
+            document.getElementById('iron').textContent = iron;
+            document.getElementById('gold').textContent = gold;
+            document.getElementById('silver').textContent = silver;
+        }
+        
+        // Inside your game loop or keypress listener:
+        if (keys['m']) {
+            iron += 5;
+            updateUI(); // Refreshes the menu display
+        }
         // =========================================
         // PHYSICS
         // ========================================
