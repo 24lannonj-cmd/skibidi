@@ -69,15 +69,37 @@ HTML_CLIENT = """
             white-space: nowrap;
             display: none;
         }
-        #item-menu {
+        #toggle-menu-btn {
             position: absolute;
             top: 15px;
+            right: 15px;
+            background: rgba(10, 15, 30, 0.9);
+            color: #00ffff;
+            border: 1px solid #00ffff;
+            border-radius: 6px;
+            padding: 8px 14px;
+            font-family: monospace;
+            font-weight: bold;
+            cursor: pointer;
+            z-index: 30;
+            box-shadow: 0 0 10px rgba(0, 255, 255, 0.2);
+        }
+        
+        #toggle-menu-btn:hover {
+            background: rgba(0, 255, 255, 0.2);
+        }
+        
+        #item-menu {
+            position: absolute;
+            top: 55px; /* Shifted down so it appears underneath the button */
             right: 15px;
             background: rgba(10,15,30,0.85); 
             padding: 10px;
             border: 2px solid #ffffff;
             border-radius: 8px;
-        }
+            display: none; /* Hidden by default */
+            z-index: 25;
+                }
     </style>
 </head>
 <body>
@@ -91,6 +113,7 @@ HTML_CLIENT = """
         <p>Controls: WASD (Forward/Turn), X/Z (Ascend/Descend)</p>
         <p>Shift to boost</p>
     </div>
+   <button id="toggle-menu-btn" onclick="toggleItemMenu()">🎒 Inventory (I)</button>
     <div id='item-menu'>
         <p> Iron: <span id='iron' class='stat'>0</span><p>
         <p> Gold: <span id='gold' class='stat'>0</span><p>
@@ -745,7 +768,22 @@ HTML_CLIENT = """
             document.getElementById('gold').textContent = inventory.gold;
             document.getElementById('silver').textContent = inventory.silver;
         }
-
+        // Toggle Visibility Function
+        function toggleItemMenu() {
+            const menu = document.getElementById('item-menu');
+            if (menu.style.display === 'none' || menu.style.display === '') {
+                menu.style.display = 'block';
+            } else {
+                menu.style.display = 'none';
+            }
+        }
+        
+        // Inside updateLocalPhysics():
+        if (keys['i'] || keys['I']) {
+            toggleItemMenu();
+            keys['i'] = false; // Prevent flickering across frames
+            keys['I'] = false;
+        }
         // =========================================
         // PHYSICS & INPUT
         // =========================================
