@@ -1108,7 +1108,58 @@ HTML_CLIENT = """
 
             renderer.render(scene, camera);
         }
+        // =========================================
+        // SAVE & ACCOUNT CLIENT LOGIC
+        // =========================================
+        let currentUser = null;
 
+        async function login(username, password) {
+            const response = await fetch('/api/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password })
+            });
+            
+            const data = await response.json();
+            if (data.userId) {
+                currentUser = data;
+                console.log("Loaded save state:", currentUser.saveData);
+            }
+            return data;
+        }
+
+        async function saveProgress(currentPos, currentMoney, currentInventory) {
+            if (!currentUser) return;
+
+            const saveData = {
+                userId: currentUser.userId,
+                position: currentPos,
+                money: currentMoney,
+                inventory: currentInventory
+            };
+
+            const response = await fetch('/api/save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(saveData)
+            });
+
+            const result = await response.json();
+            console.log("Save status:", result);
+        }
+
+        // Auto-save every 30 seconds
+        setInterval(() => {
+            if (currentUser && localPlayerId && gameState.players[localPlayerId]) {
+                const me = gameState.players[localPlayerId];
+                saveProgress(
+                    { x: me.x, y: me.y, z: me.z },
+                    inventory.money,
+                    inventory
+                );
+            }
+        }, 30000);
+        
         animate();
     </script>
 </body>
