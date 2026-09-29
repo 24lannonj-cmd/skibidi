@@ -1,5 +1,5 @@
 # Run Command:
-# uvicorn main:app --host 0.0.0.0 --port $PORT
+# uvicorn main:app --host 0.0.0.0 --port 8000
 
 import asyncio
 import json
@@ -44,6 +44,10 @@ init_db()
 def hash_password(password: str) -> str:
     return hashlib.sha256(password.encode()).hexdigest()
 
+# Global Connection and Game State Tracking
+active_connections: list[WebSocket] = []
+game_state = {"players": {}}
+
 # ==============================================================================
 # 1. FRONTEND HTML & CSS LAYOUT
 # ==============================================================================
@@ -52,10 +56,8 @@ HTML_CLIENT = """
 <html>
 <head>
     <title>Infinite Synced Space Sandbox 3D</title>
-    <!-- 1. Load Core Three.js FIRST -->
+    <!-- Core Three.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    
-    <!-- 2. Load Loaders AFTER Three.js -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/MTLLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js"></script>
 
@@ -162,7 +164,7 @@ HTML_CLIENT = """
             <span style="font-weight: bold; width: 70px;">Iron</span>
             <div>
                 <button onclick="buyResource('iron')" style="background: #28a745; color: white; border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer; margin-right: 5px;">Buy (10$)</button>
-                <button onclick="sellResource('iron')" style="background: #dc3545; color: white; border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer;">Sell (8$)</button>
+                <button onclick="sellResource('iron')" style="background: #dc3545; color: white; border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer;">Sell (7$)</button>
             </div>
         </div>
     
@@ -170,7 +172,7 @@ HTML_CLIENT = """
             <span style="font-weight: bold; width: 70px;">Silver</span>
             <div>
                 <button onclick="buyResource('silver')" style="background: #28a745; color: white; border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer; margin-right: 5px;">Buy (25$)</button>
-                <button onclick="sellResource('silver')" style="background: #dc3545; color: white; border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer;">Sell (20$)</button>
+                <button onclick="sellResource('silver')" style="background: #dc3545; color: white; border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer;">Sell (15$)</button>
             </div>
         </div>
     
@@ -178,7 +180,7 @@ HTML_CLIENT = """
             <span style="font-weight: bold; width: 70px;">Gold</span>
             <div>
                 <button onclick="buyResource('gold')" style="background: #28a745; color: white; border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer; margin-right: 5px;">Buy (50$)</button>
-                <button onclick="sellResource('gold')" style="background: #dc3545; color: white; border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer;">Sell (40$)</button>
+                <button onclick="sellResource('gold')" style="background: #dc3545; color: white; border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer;">Sell (35$)</button>
             </div>
         </div>
     
@@ -187,38 +189,27 @@ HTML_CLIENT = """
 
     <div id="ui">
         <h3 style="margin-top: 0; color: #00ffff; text-shadow: 0 0 8px #00ffff;">3D Infinite Warp Flight Deck</h3>
-        <p>Position: X <span id="pos-x" class="stat">0</span> | Y <span id="pos-y" class="stat">0</span> | Z <span id="pos-z" class="stat">0</span><p>
+        <p>Position: X <span id="pos-x" class="stat">0</span> | Y <span id="pos-y" class="stat">0</span> | Z <span id="pos-z" class="stat">0</span></p>
         <p>Speed: <span id="speed" class="stat">0</span> m/s</p>
         <p>Pilots Online: <span id="player-count" class="stat">0</span></p>
         <p>Active Planets: <span id="planet-count" class="stat">0</span></p>
         <p>Nearest Planet: <span id="nearest-dist" class="stat">N/A</span></p>
         <p>Controls: WASD (Forward/Turn), X/Z (Ascend/Descend)</p>
-        <p>Shift to boost</p>
+        <p>Shift to boost | T near station to trade</p>
     </div>
 
     <button id="toggle-menu-btn" onclick="toggleItemMenu()">🎒 Inventory (I)</button>
     <div id='item-menu'>
-        <p> Money: <span id='money' class='stat'>0</span><p>
-        <p> Iron: <span id='iron' class='stat'>0</span><p>
-        <p> Gold: <span id='gold' class='stat'>0</span><p>
-        <p> Silver: <span id='silver' class='stat'>0</span><p>
+        <p> Money: <span id='money' class='stat'>0</span></p>
+        <p> Iron: <span id='iron' class='stat'>0</span></p>
+        <p> Gold: <span id='gold' class='stat'>0</span></p>
+        <p> Silver: <span id='silver' class='stat'>0</span></p>
     </div>
     
     <div id="nav-arrow"></div>
     <div id="nav-text">TARGET</div>
 
     <script>
-        window.onerror = function(msg, url, line) {
-            let errDiv = document.getElementById('screen-log');
-            if (!errDiv) {
-                errDiv = document.createElement('div');
-                errDiv.id = 'screen-log';
-                errDiv.style.cssText = 'position:fixed; bottom:10px; left:10px; background:rgba(255,0,0,0.85); color:#fff; padding:10px; z-index:9999; font-size:12px; max-width:80%; word-break:break-all; border-radius:5px;';
-                document.body.appendChild(errDiv);
-            }
-            errDiv.innerHTML += `<p style="margin:2px 0;">ERROR: ${msg} (Line ${line})</p>`;
-        };
-
         const scene = new THREE.Scene();
         scene.fog = new THREE.FogExp2(0x020208, 0.00002);
         
@@ -235,26 +226,6 @@ HTML_CLIENT = """
         sunLight.position.set(50000, 100000, 50000);
         scene.add(sunLight);
 
-        let loadedShipModel = null;
-        const objLoader = new THREE.OBJLoader();
-        
-        objLoader.load('https://corsproxy.io/?' + encodeURIComponent('https://raw.githubusercontent.com/24lannonj-cmd/skibidi/main/ship.obj'), function (obj) {
-            const shipMaterial = new THREE.MeshStandardMaterial({ 
-                color: 0x00aaff, 
-                metalness: 0.8, 
-                roughness: 0.2 
-            });
-
-            obj.traverse((child) => {
-                if (child.isMesh) {
-                    child.material = shipMaterial;
-                }
-            });
-
-            loadedShipModel = obj;
-            loadedShipModel.scale.set(1.5, 1.5, 1.5);
-        });
-
         const GLOBAL_SEED = 987654321;
 
         function seededRandom(seed) {
@@ -265,9 +236,7 @@ HTML_CLIENT = """
         const planetTextureCache = {};
 
         function generatePlanetTextures(seed) {
-            if (planetTextureCache[seed]) {
-                return planetTextureCache[seed];
-            }
+            if (planetTextureCache[seed]) return planetTextureCache[seed];
 
             const canvas = document.createElement('canvas');
             canvas.width = 512;
@@ -278,42 +247,24 @@ HTML_CLIENT = """
             const rand = () => { s += 1; return seededRandom(s); };
 
             const globalTemp = rand(); 
-
             let baseColor, continentColor, detailColor, capColor, isLava = false;
 
             if (globalTemp > 0.82) {
-                baseColor = '#1a0b0b';
-                continentColor = '#e63900';
-                detailColor = '#ffaa00';
-                capColor = null;
-                isLava = true;
+                baseColor = '#1a0b0b'; continentColor = '#e63900'; detailColor = '#ffaa00'; capColor = null; isLava = true;
             } else if (globalTemp > 0.62) {
-                baseColor = '#8c593b';
-                continentColor = '#d99b00';
-                detailColor = '#ffcc66';
-                capColor = null;
+                baseColor = '#8c593b'; continentColor = '#d99b00'; detailColor = '#ffcc66'; capColor = null;
             } else if (globalTemp > 0.38) {
-                baseColor = '#0b3d91';
-                continentColor = '#3a7d44';
-                detailColor = '#24522c';
-                capColor = '#ffffff';
+                baseColor = '#0b3d91'; continentColor = '#3a7d44'; detailColor = '#24522c'; capColor = '#ffffff';
             } else if (globalTemp > 0.18) {
-                baseColor = '#2b4450';
-                continentColor = '#607d8b';
-                detailColor = '#8ca3ad';
-                capColor = '#e0f7fa';
+                baseColor = '#2b4450'; continentColor = '#607d8b'; detailColor = '#8ca3ad'; capColor = '#e0f7fa';
             } else {
-                baseColor = '#b2ebf2';
-                continentColor = '#e0f7fa';
-                detailColor = '#ffffff';
-                capColor = '#ffffff';
+                baseColor = '#b2ebf2'; continentColor = '#e0f7fa'; detailColor = '#ffffff'; capColor = '#ffffff';
             }
 
             ctx.fillStyle = baseColor;
             ctx.fillRect(0, 0, 512, 256);
 
             const continentCount = 4 + Math.floor(rand() * 5);
-
             for (let c = 0; c < continentCount; c++) {
                 const cx = rand() * 512;
                 const cy = rand() * 256;
@@ -328,40 +279,10 @@ HTML_CLIENT = """
                     const rY = radiusY * (0.6 + rand() * 0.8);
                     const px = cx + Math.cos(angle) * rX;
                     const py = cy + Math.sin(angle) * rY;
-
-                    if (i === 0) ctx.moveTo(px, py);
-                    else ctx.lineTo(px, py);
+                    if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
                 }
                 ctx.closePath();
                 ctx.fillStyle = continentColor;
-                ctx.fill();
-
-                ctx.beginPath();
-                for (let i = 0; i < points; i++) {
-                    const angle = (i / points) * Math.PI * 2;
-                    const rX = (radiusX * 0.4) * (0.6 + rand() * 0.6);
-                    const rY = (radiusY * 0.4) * (0.6 + rand() * 0.6);
-                    const px = cx + Math.cos(angle) * rX;
-                    const py = cy + Math.sin(angle) * rY;
-
-                    if (i === 0) ctx.moveTo(px, py);
-                    else ctx.lineTo(px, py);
-                }
-                ctx.closePath();
-                ctx.fillStyle = detailColor;
-                ctx.fill();
-            }
-
-            if (capColor) {
-                ctx.fillStyle = capColor;
-                const capRadius = globalTemp < 0.18 ? 90 : 45 + rand() * 15;
-
-                ctx.beginPath();
-                ctx.arc(256, 0, capRadius, 0, Math.PI * 2);
-                ctx.fill();
-
-                ctx.beginPath();
-                ctx.arc(256, 256, capRadius, 0, Math.PI * 2);
                 ctx.fill();
             }
 
@@ -378,7 +299,6 @@ HTML_CLIENT = """
         const CLUSTER_DRAW_RADIUS = 1; 
         const UNLOAD_DISTANCE_THRESHOLD = 350000; 
         const planetObjects = {};
-
         const sharedSphereGeom = new THREE.SphereGeometry(1, 32, 32);
 
         function createSystemCluster(cx, cy, cz) {
@@ -403,10 +323,8 @@ HTML_CLIENT = """
 
                 seed += 100 + p * 50;
                 const angle = seededRandom(seed) * Math.PI * 2;
-                
                 seed += 101 + p * 50;
                 const clusterOffsetDist = 40000 + seededRandom(seed) * 40000;
-                
                 seed += 102 + p * 50;
                 const altOffset = (seededRandom(seed) - 0.5) * 20000;
 
@@ -418,7 +336,6 @@ HTML_CLIENT = """
                 const radius = 6000 + seededRandom(seed) * 9000;
 
                 const textures = generatePlanetTextures(seed);
-
                 const mat = new THREE.MeshStandardMaterial({ 
                     map: textures.colorTex,
                     roughness: textures.isLava ? 0.4 : 0.7,
@@ -431,18 +348,9 @@ HTML_CLIENT = """
                 const mesh = new THREE.Mesh(sharedSphereGeom, mat);
                 mesh.scale.set(radius, radius, radius);
                 mesh.position.set(px, pz, py);
-
                 scene.add(mesh);
 
-                planetObjects[pKey] = {
-                    mesh: mesh,
-                    x: px,
-                    y: py,
-                    z: pz,
-                    radius: radius,
-                    clusterKey: clusterKey,
-                    seed: seed
-                };
+                planetObjects[pKey] = { mesh, x: px, y: py, z: pz, radius, clusterKey, seed };
             }
         }
 
@@ -477,11 +385,7 @@ HTML_CLIENT = """
                 }
             }
 
-            let totalPlanets = 0;
-            for (let key in planetObjects) {
-                if (planetObjects[key]) totalPlanets++;
-            }
-            document.getElementById('planet-count').innerText = totalPlanets;
+            document.getElementById('planet-count').innerText = Object.keys(planetObjects).length;
         }
 
         const arrowEl = document.getElementById('nav-arrow');
@@ -524,7 +428,6 @@ HTML_CLIENT = """
 
             let screenX = (screenPos.x * widthHalf) + widthHalf;
             let screenY = -(screenPos.y * heightHalf) + heightHalf;
-
             const isBehind = screenPos.z > 1;
 
             const margin = 50;
@@ -543,157 +446,22 @@ HTML_CLIENT = """
                 const maxX = widthHalf - margin;
                 const maxY = heightHalf - margin;
 
-                const cos = Math.cos(angle);
-                const sin = Math.sin(angle);
-
-                const scaleX = maxX / Math.abs(cos);
-                const scaleY = maxY / Math.abs(sin);
+                const scaleX = maxX / Math.abs(Math.cos(angle));
+                const scaleY = maxY / Math.abs(Math.sin(angle));
                 const scale = Math.min(scaleX, scaleY);
 
-                edgeX = widthHalf + cos * scale;
-                edgeY = heightHalf + sin * scale;
+                edgeX = widthHalf + Math.cos(angle) * scale;
+                edgeY = heightHalf + Math.sin(angle) * scale;
             }
-
-            const dx = screenX - edgeX;
-            const dy = screenY - edgeY;
-            let rotationAngle = Math.atan2(dy, dx) + Math.PI / 2;
-            if (isBehind) rotationAngle += Math.PI;
 
             arrowEl.style.display = 'block';
             arrowEl.style.left = `${edgeX - 12}px`;
             arrowEl.style.top = `${edgeY - 12}px`;
-            arrowEl.style.transform = `rotate(${rotationAngle}rad)`;
 
             textEl.style.display = 'block';
             textEl.style.left = `${edgeX - 25}px`;
             textEl.style.top = `${edgeY + 18}px`;
             textEl.innerText = `${formattedDist}m`;
-        }
-
-        function createStarGlowTexture() {
-            const canvas = document.createElement('canvas');
-            canvas.width = 32;
-            canvas.height = 32;
-            const ctx = canvas.getContext('2d');
-
-            const gradient = ctx.createRadialGradient(16, 16, 0, 16, 16, 16);
-            gradient.addColorStop(0.0, 'rgba(255, 255, 255, 1.0)'); 
-            gradient.addColorStop(0.5, 'rgba(245, 245, 245, 0.3)');  
-            gradient.addColorStop(1.0, 'rgba(0, 0, 0, 0)');        
-
-            ctx.fillStyle = gradient;
-            ctx.fillRect(0, 0, 32, 32);
-
-            const tex = new THREE.CanvasTexture(canvas);
-            tex.needsUpdate = true;
-            return tex;
-        }
-
-        const TOTAL_STARS = 400;
-        const STAR_FIELD_RADIUS = 12000;
-        const starPositions = new Float32Array(TOTAL_STARS * 3);
-        const starOrigins = [];
-
-        for (let i = 0; i < TOTAL_STARS; i++) {
-            const rx = (Math.random() - 0.5) * STAR_FIELD_RADIUS * 2;
-            const ry = (Math.random() - 0.5) * STAR_FIELD_RADIUS * 2;
-            const rz = (Math.random() - 0.5) * STAR_FIELD_RADIUS * 2;
-            
-            starOrigins.push({ x: rx, y: ry, z: rz });
-
-            const idx = i * 3;
-            starPositions[idx]     = rx;
-            starPositions[idx + 1] = ry;
-            starPositions[idx + 2] = rz;
-        }
-
-        const starGeo = new THREE.BufferGeometry();
-        starGeo.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
-
-        const starGlowTexture = createStarGlowTexture();
-        const starMat = new THREE.PointsMaterial({
-            size: 60,
-            map: starGlowTexture,
-            transparent: true,
-            blending: THREE.AdditiveBlending,
-            depthWrite: false
-        });
-
-        const starPoolMesh = new THREE.Points(starGeo, starMat);
-        starPoolMesh.frustumCulled = false;
-        scene.add(starPoolMesh);
-
-        function updateStarPool(px, py, pz) {
-            const posAttr = starGeo.attributes.position;
-            const posArray = posAttr.array;
-
-            for (let i = 0; i < TOTAL_STARS; i++) {
-                const pt = starOrigins[i];
-                
-                let dx = pt.x - px;
-                let dy = pt.y - py;
-                let dz = pt.z - pz;
-                let distSq = dx * dx + dy * dy + dz * dz;
-
-                if (distSq > STAR_FIELD_RADIUS * STAR_FIELD_RADIUS) {
-                    const u = Math.random();
-                    const v = Math.random();
-                    const theta = u * 2.0 * Math.PI; 
-                    const phi = Math.acos(2.0 * v - 1.0); 
-                    const radius = STAR_FIELD_RADIUS * 0.95; 
-
-                    pt.x = px + radius * Math.sin(phi) * Math.cos(theta);
-                    pt.y = py + radius * Math.sin(phi) * Math.sin(theta);
-                    pt.z = pz + radius * Math.cos(phi);
-                }
-
-                const idx = i * 3;
-                posArray[idx]     = pt.x;
-                posArray[idx + 1] = pt.y;
-                posArray[idx + 2] = pt.z;
-            }
-
-            posAttr.needsUpdate = true;
-        }
-
-        const lineGeo = new THREE.BufferGeometry();
-        const linePositions = new Float32Array(6); 
-        lineGeo.setAttribute('position', new THREE.BufferAttribute(linePositions, 3));
-        const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff, opacity: 0.8, transparent: true });
-        const originLine = new THREE.Line(lineGeo, lineMat);
-        originLine.frustumCulled = false;
-        scene.add(originLine);
-
-        const trailParticles = [];
-        const particleGeo = new THREE.SphereGeometry(1.2, 4, 4);
-        const particleMat = new THREE.MeshBasicMaterial({ color: 0xff6600, transparent: true, opacity: 0.8 });
-
-        function spawnTrailParticle(x, y, z, angle) {
-            if (trailParticles.length > 12) return;
-            const particle = new THREE.Mesh(particleGeo, particleMat.clone());
-            particle.position.set(
-                x - Math.sin(angle) * 12 + (Math.random() - 0.5) * 2,
-                z + (Math.random() - 0.5) * 2,
-                y + Math.cos(angle) * 12 + (Math.random() - 0.5) * 2
-            );
-            scene.add(particle);
-            trailParticles.push({ mesh: particle, life: 1.0 });
-        }
-
-        function updateParticles() {
-            for (let i = trailParticles.length - 1; i >= 0; i--) {
-                const p = trailParticles[i];
-                p.life -= 0.1;
-                p.mesh.scale.multiplyScalar(0.92);
-                p.mesh.material.opacity = p.life;
-
-                if (p.life <= 0) {
-                    scene.remove(p.mesh);
-                    p.mesh.geometry.dispose();
-                    p.mesh.material.dispose();
-                    trailParticles.splice(i, 1);
-                }
-            }
         }
 
         function createShipMesh(isLocal) {
@@ -742,9 +510,10 @@ HTML_CLIENT = """
         const stationMesh = createStationMesh();
         scene.add(stationMesh);
 
+        // Setup WebSocket with auto-reconnect fallback
         const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const wsUrl = `${wsProtocol}//${window.location.host}/ws`;
-        const ws = new WebSocket(wsUrl);
+        let ws = new WebSocket(wsUrl);
 
         let localPlayerId = null;
         let gameState = { players: {} };
@@ -760,35 +529,46 @@ HTML_CLIENT = """
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
 
-        ws.onmessage = (event) => {
-            const data = JSON.parse(event.data);
-            if (data.type === 'init') {
-                localPlayerId = data.id;
-                if (!gameState.players[localPlayerId]) {
-                    gameState.players[localPlayerId] = { x: 200, y: 0, z: 0, angle: 0, vx: 0, vy: 0, vz: 0 };
-                }
-                return;
-            }
-            if (data.type === 'state') {
-                for (let id in data.gameState.players) {
-                    if (id !== localPlayerId) {
-                        gameState.players[id] = data.gameState.players[id];
-                    } else if (!gameState.players[localPlayerId]) {
-                        gameState.players[localPlayerId] = data.gameState.players[id];
+        function setupWebSocket() {
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                if (data.type === 'init') {
+                    localPlayerId = data.id;
+                    if (!gameState.players[localPlayerId]) {
+                        gameState.players[localPlayerId] = { x: 200, y: 0, z: 0, angle: 0, vx: 0, vy: 0, vz: 0 };
                     }
+                    return;
                 }
-                for (let id in gameState.players) {
-                    if (!data.gameState.players[id] && id !== localPlayerId) {
-                        delete gameState.players[id];
-                        if (shipMeshes[id]) {
-                            scene.remove(shipMeshes[id]);
-                            delete shipMeshes[id];
+                if (data.type === 'state') {
+                    for (let id in data.gameState.players) {
+                        if (id !== localPlayerId) {
+                            gameState.players[id] = data.gameState.players[id];
+                        } else if (!gameState.players[localPlayerId]) {
+                            gameState.players[localPlayerId] = data.gameState.players[id];
                         }
                     }
+                    for (let id in gameState.players) {
+                        if (!data.gameState.players[id] && id !== localPlayerId) {
+                            delete gameState.players[id];
+                            if (shipMeshes[id]) {
+                                scene.remove(shipMeshes[id]);
+                                delete shipMeshes[id];
+                            }
+                        }
+                    }
+                    document.getElementById('player-count').innerText = Object.keys(data.gameState.players).length;
                 }
-                document.getElementById('player-count').innerText = Object.keys(data.gameState.players).length;
-            }
-        };
+            };
+
+            ws.onclose = () => {
+                setTimeout(() => {
+                    ws = new WebSocket(wsUrl);
+                    setupWebSocket();
+                }, 1000);
+            };
+        }
+
+        setupWebSocket();
 
         function updateUI() {
             document.getElementById('money').textContent = inventory.money || 0;
@@ -799,44 +579,26 @@ HTML_CLIENT = """
 
         function toggleItemMenu() {
             const menu = document.getElementById('item-menu');
-            if (menu.style.display === 'none' || menu.style.display === '') {
-                menu.style.display = 'block';
-            } else {
-                menu.style.display = 'none';
-            }
+            menu.style.display = (menu.style.display === 'none' || menu.style.display === '') ? 'block' : 'none';
         }
 
         window.addEventListener('keydown', e => {
-            if ((e.key === 'i' || e.key === 'I') && !e.repeat) {
-                toggleItemMenu();
-            }
+            if ((e.key === 'i' || e.key === 'I') && !e.repeat) toggleItemMenu();
         });
 
-        const tradePrices = {
-            iron:   { buy: 10, sell: 7 },
-            gold:   { buy: 50, sell: 35 },
-            silver: { buy: 25, sell: 15 }
-        };
+        const tradePrices = { iron: { buy: 10, sell: 7 }, gold: { buy: 50, sell: 35 }, silver: { buy: 25, sell: 15 } };
         let isTrading = false;
-        const TRADE_DISTANCE = 50; 
+        const TRADE_DISTANCE = 100; 
         
         function toggleTradeMenu() {
             const tradeMenu = document.getElementById('trade-menu');
             const me = gameState.players[localPlayerId];
-            
             if (!me) return;
         
-            const distance = Math.sqrt(
-                me.x ** 2 + 
-                me.y ** 2 + 
-                (me.z || 0) ** 2
-            );
-        
-            if (!isTrading) {
-                if (distance <= TRADE_DISTANCE) {
-                    isTrading = true;
-                    tradeMenu.style.display = 'block';
-                }
+            const distance = Math.sqrt(me.x ** 2 + me.y ** 2 + (me.z || 0) ** 2);
+            if (!isTrading && distance <= TRADE_DISTANCE) {
+                isTrading = true;
+                tradeMenu.style.display = 'block';
             } else {
                 isTrading = false;
                 tradeMenu.style.display = 'none';
@@ -844,32 +606,25 @@ HTML_CLIENT = """
         }
         
         window.addEventListener('keydown', (e) => {
-            if (e.key.toLowerCase() === 't') {
-                toggleTradeMenu();
-            } else if (e.key === 'Escape' && isTrading) {
+            if (e.key.toLowerCase() === 't') toggleTradeMenu();
+            if (e.key === 'Escape' && isTrading) {
                 isTrading = false;
                 document.getElementById('trade-menu').style.display = 'none';
             }
         });
 
-        function buyResource(resource) {
-            const config = tradePrices[resource];
-            if (!config) return;
-        
-            if (inventory.money >= config.buy) {
-                inventory.money -= config.buy;
-                inventory[resource] = (inventory[resource] || 0) + 1;
+        function buyResource(res) {
+            if (inventory.money >= tradePrices[res].buy) {
+                inventory.money -= tradePrices[res].buy;
+                inventory[res] = (inventory[res] || 0) + 1;
                 updateUI();
             }
         }
         
-        function sellResource(resource) {
-            const config = tradePrices[resource];
-            if (!config) return;
-        
-            if (inventory[resource] >= 1) {
-                inventory[resource] -= 1;
-                inventory.money += config.sell;
+        function sellResource(res) {
+            if (inventory[res] >= 1) {
+                inventory[res] -= 1;
+                inventory.money += tradePrices[res].sell;
                 updateUI();
             }
         }
@@ -877,14 +632,6 @@ HTML_CLIENT = """
         function updateLocalPhysics() {
             if (localPlayerId && gameState.players[localPlayerId]) {
                 const me = gameState.players[localPlayerId];
-                
-                if (keys['m'] || keys['M']) {
-                    inventory.iron = (inventory.iron || 0) + 5;
-                    inventory.money = (inventory.money || 0) + 5;
-                    updateUI();
-                    keys['m'] = false; 
-                    keys['M'] = false;
-                }
                 
                 if (!me.vx || isNaN(me.vx)) me.vx = 0;
                 if (!me.vy || isNaN(me.vy)) me.vy = 0;
@@ -895,14 +642,11 @@ HTML_CLIENT = """
                 
                 if (keys['ArrowLeft'] || keys['a'] || keys['A']) me.angle -= 0.03;
                 if (keys['ArrowRight'] || keys['d'] || keys['D']) me.angle += 0.03;
-                
                 if (keys['x'] || keys['X']) me.vz += 0.85;
                 if (keys['z'] || keys['Z']) me.vz -= 0.85;
                 
                 if (keys['ArrowDown'] || keys['s'] || keys['S']) {
-                    me.vx *= 0.95;
-                    me.vy *= 0.95;
-                    me.vz *= 0.90;
+                    me.vx *= 0.95; me.vy *= 0.95; me.vz *= 0.90;
                 }
         
                 const maxSpeed = isBoosting ? 100 : 50;
@@ -910,63 +654,19 @@ HTML_CLIENT = """
         
                 if (isThrusting) {
                     const baseAccel = isBoosting ? 1.0 : 0.4;
-                    const dragFactor = 0.013;
-                    const effectiveThrust = baseAccel + (currentSpeed * dragFactor);
-                    
-                    me.vx += Math.sin(me.angle) * effectiveThrust;
-                    me.vy -= Math.cos(me.angle) * effectiveThrust;
-                    
-                    spawnTrailParticle(me.x, me.y, me.z, me.angle);
+                    me.vx += Math.sin(me.angle) * baseAccel;
+                    me.vy -= Math.cos(me.angle) * baseAccel;
                 }
         
                 currentSpeed = Math.sqrt(me.vx * me.vx + me.vy * me.vy + me.vz * me.vz);
-        
                 if (currentSpeed > maxSpeed) {
                     const scale = maxSpeed / currentSpeed;
-                    me.vx *= scale;
-                    me.vy *= scale;
-                    me.vz *= scale;
+                    me.vx *= scale; me.vy *= scale; me.vz *= scale;
                 } else if (!isThrusting) {
-                    me.vx *= 0.987;
-                    me.vy *= 0.987;
-                    me.vz *= 0.950;
+                    me.vx *= 0.987; me.vy *= 0.987; me.vz *= 0.950;
                 }
         
-                me.x += me.vx;
-                me.y += me.vy;
-                me.z += me.vz;
-        
-                const shipRadius = 12;
-                for (let key in planetObjects) {
-                    const planet = planetObjects[key];
-                    if (!planet) continue;
-        
-                    const dx = me.x - planet.x;
-                    const dy = me.z - planet.z; 
-                    const dz = me.y - planet.y;
-                    const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-                    const minDist = planet.radius + shipRadius;
-        
-                    if (dist < minDist && dist > 0) {
-                        const nx = dx / dist;
-                        const ny = dz / dist; 
-                        const nz = dy / dist;
-        
-                        const overlap = minDist - dist;
-                        me.x += nx * overlap;
-                        me.z += ny * overlap;
-                        me.y += nz * overlap;
-        
-                        const dotProduct = me.vx * nx + me.vz * ny + me.vy * nz;
-        
-                        if (dotProduct < 0) {
-                            me.vx = (me.vx - 2 * dotProduct * nx) * 0.6;
-                            me.vz = (me.vz - 2 * dotProduct * ny) * 0.6;
-                            me.vy = (me.vy - 2 * dotProduct * nz) * 0.6;
-                            me.angle = Math.atan2(me.vx, -me.vy);
-                        }
-                    }
-                }
+                me.x += me.vx; me.y += me.vy; me.z += me.vz;
         
                 if (ws.readyState === WebSocket.OPEN) {
                     ws.send(JSON.stringify({ 
@@ -999,15 +699,8 @@ HTML_CLIENT = """
         function animate() {
             requestAnimationFrame(animate);
             updateLocalPhysics();
-            updateParticles();
 
             stationMesh.rotation.y += 0.005;
-
-            for (let key in planetObjects) {
-                if (planetObjects[key] && planetObjects[key].mesh) {
-                    planetObjects[key].mesh.rotation.y += 0.001;
-                }
-            }
 
             for (let id in gameState.players) {
                 const p = gameState.players[id];
@@ -1034,19 +727,8 @@ HTML_CLIENT = """
             const me = gameState.players[localPlayerId];
             if (me && shipMeshes[localPlayerId]) {
                 updateCameraPosition(me);
-
-                updateStarPool(me.x, me.z || 0, me.y);
                 updatePlanetClusters(me.x, me.z || 0, me.y);
                 updatePlanetPointer(me.x, me.z || 0, me.y);
-
-                const posArr = originLine.geometry.attributes.position.array;
-                posArr[0] = 0;     
-                posArr[1] = 0;     
-                posArr[2] = 0;     
-                posArr[3] = me.x;  
-                posArr[4] = me.z || 0; 
-                posArr[5] = me.y;  
-                originLine.geometry.attributes.position.needsUpdate = true;
 
                 const spd = Math.sqrt(me.vx * me.vx + me.vy * me.vy + (me.vz || 0) * (me.vz || 0)).toFixed(1);
                 document.getElementById('pos-x').innerText = Math.round(me.x);
@@ -1126,9 +808,7 @@ HTML_CLIENT = """
             });
         }
 
-        // Auto-save every 30 seconds
         setInterval(saveProgress, 30000);
-        
         animate();
     </script>
 </body>
@@ -1136,7 +816,7 @@ HTML_CLIENT = """
 """
 
 # ==============================================================================
-# BACKEND GAME STATE & FASTAPI SERVER
+# 2. BACKEND GAME STATE & FASTAPI SERVER
 # ==============================================================================
 class AuthRequest(BaseModel):
     username: str
@@ -1213,8 +893,6 @@ async def save_game(data: SaveRequest):
     conn.close()
     return {"success": True}
 
-game_state = {"players": {}}
-
 @app.get("/")
 async def get():
     return HTMLResponse(HTML_CLIENT)
@@ -1222,8 +900,10 @@ async def get():
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
+    active_connections.append(websocket)
     player_id = str(id(websocket))
-    game_state["players"][player_id] = {"x": 200, "y": 0, "z": 0, "angle": 0}
+    game_state["players"][player_id] = {"x": 200, "y": 0, "z": 0, "angle": 0, "vx": 0, "vy": 0, "vz": 0}
+    
     await websocket.send_text(json.dumps({"type": "init", "id": player_id}))
 
     try:
@@ -1236,13 +916,27 @@ async def websocket_endpoint(websocket: WebSocket):
                     p["x"] = payload.get("x", p["x"])
                     p["y"] = payload.get("y", p["y"])
                     p["z"] = payload.get("z", p["z"])
+                    p["angle"] = payload.get("angle", p["angle"])
+                    p["vx"] = payload.get("vx", p["vx"])
+                    p["vy"] = payload.get("vy", p["vy"])
+                    p["vz"] = payload.get("vz", p["vz"])
     except WebSocketDisconnect:
+        if websocket in active_connections:
+            active_connections.remove(websocket)
         if player_id in game_state["players"]:
             del game_state["players"][player_id]
 
 async def broadcast_loop():
     while True:
         await asyncio.sleep(1 / 30)
+        if active_connections:
+            message = json.dumps({"type": "state", "gameState": game_state})
+            for connection in list(active_connections):
+                try:
+                    await connection.send_text(message)
+                except Exception:
+                    if connection in active_connections:
+                        active_connections.remove(connection)
 
 @app.on_event("startup")
 async def startup_event():
