@@ -10,6 +10,7 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
 app = FastAPI()
+
 def init_db():
     conn = sqlite3.connect("game.db")
     cursor = conn.cursor()
@@ -42,6 +43,7 @@ init_db()
 
 def hash_password(password: str) -> str:
     return hashlib.sha256(password.encode()).hexdigest()
+
 # ==============================================================================
 # 1. FRONTEND HTML & CSS LAYOUT
 # ==============================================================================
@@ -125,19 +127,19 @@ HTML_CLIENT = """
         
         #item-menu {
             position: absolute;
-            top: 55px; /* Shifted down so it appears underneath the button */
+            top: 55px;
             right: 15px;
             background: rgba(10,15,30,0.85); 
             padding: 10px;
             border: 2px solid #ffffff;
             border-radius: 8px;
-            display: none; /* Hidden by default */
+            display: none;
             z-index: 25;
-                }
+        }
     </style>
 </head>
 <body>
-    <!-- Login / Register Overlay -->
+    <!-- Login / Register Modal Overlay -->
     <div id="auth-overlay" style="position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(5, 10, 20, 0.9); z-index: 2000; display: flex; justify-content: center; align-items: center; flex-direction: column;">
         <div style="background: rgba(15, 20, 35, 0.95); border: 2px solid #00ffff; padding: 25px; border-radius: 8px; text-align: center; width: 280px;">
             <h2 style="color: #00ffff; margin-top: 0;">PILOT LOGIN</h2>
@@ -150,13 +152,12 @@ HTML_CLIENT = """
             </div>
         </div>
     </div>
-    
+
     <!-- Trade Window Overlay -->
     <div id="trade-menu" style="display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(15, 20, 30, 0.95); border: 2px solid #00d2ff; border-radius: 10px; padding: 20px; color: #fff; font-family: sans-serif; box-shadow: 0 0 20px rgba(0, 210, 255, 0.3); min-width: 320px; z-index: 1000;">
         <h2 style="margin-top: 0; text-align: center; color: #00d2ff; text-transform: uppercase; letter-spacing: 2px;">Station Trading Hub</h2>
         <p style="text-align: center; font-size: 0.9em; color: #aaa; margin-bottom: 20px;">Docked at Station (0, 0, 0)</p>
     
-        <!-- Iron Trade Row -->
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; background: rgba(255, 255, 255, 0.05); padding: 8px 12px; border-radius: 6px;">
             <span style="font-weight: bold; width: 70px;">Iron</span>
             <div>
@@ -165,7 +166,6 @@ HTML_CLIENT = """
             </div>
         </div>
     
-        <!-- Silver Trade Row -->
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; background: rgba(255, 255, 255, 0.05); padding: 8px 12px; border-radius: 6px;">
             <span style="font-weight: bold; width: 70px;">Silver</span>
             <div>
@@ -174,7 +174,6 @@ HTML_CLIENT = """
             </div>
         </div>
     
-        <!-- Gold Trade Row -->
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; background: rgba(255, 255, 255, 0.05); padding: 8px 12px; border-radius: 6px;">
             <span style="font-weight: bold; width: 70px;">Gold</span>
             <div>
@@ -185,6 +184,7 @@ HTML_CLIENT = """
     
         <p style="text-align: center; font-size: 0.8em; color: #888;">Press <kbd>T</kbd> or <kbd>ESC</kbd> to exit trade hub</p>
     </div>
+
     <div id="ui">
         <h3 style="margin-top: 0; color: #00ffff; text-shadow: 0 0 8px #00ffff;">3D Infinite Warp Flight Deck</h3>
         <p>Position: X <span id="pos-x" class="stat">0</span> | Y <span id="pos-y" class="stat">0</span> | Z <span id="pos-z" class="stat">0</span><p>
@@ -195,7 +195,8 @@ HTML_CLIENT = """
         <p>Controls: WASD (Forward/Turn), X/Z (Ascend/Descend)</p>
         <p>Shift to boost</p>
     </div>
-   <button id="toggle-menu-btn" onclick="toggleItemMenu()">🎒 Inventory (I)</button>
+
+    <button id="toggle-menu-btn" onclick="toggleItemMenu()">🎒 Inventory (I)</button>
     <div id='item-menu'>
         <p> Money: <span id='money' class='stat'>0</span><p>
         <p> Iron: <span id='iron' class='stat'>0</span><p>
@@ -203,14 +204,10 @@ HTML_CLIENT = """
         <p> Silver: <span id='silver' class='stat'>0</span><p>
     </div>
     
-    
     <div id="nav-arrow"></div>
     <div id="nav-text">TARGET</div>
 
     <script>
-        // Core Setup
-        
-        // Screen Logger Fallback
         window.onerror = function(msg, url, line) {
             let errDiv = document.getElementById('screen-log');
             if (!errDiv) {
@@ -221,6 +218,7 @@ HTML_CLIENT = """
             }
             errDiv.innerHTML += `<p style="margin:2px 0;">ERROR: ${msg} (Line ${line})</p>`;
         };
+
         const scene = new THREE.Scene();
         scene.fog = new THREE.FogExp2(0x020208, 0.00002);
         
@@ -237,11 +235,9 @@ HTML_CLIENT = """
         sunLight.position.set(50000, 100000, 50000);
         scene.add(sunLight);
 
-        // Model Loader Setup
         let loadedShipModel = null;
         const objLoader = new THREE.OBJLoader();
         
-        // Update URL to match your actual file location
         objLoader.load('https://corsproxy.io/?' + encodeURIComponent('https://raw.githubusercontent.com/24lannonj-cmd/skibidi/main/ship.obj'), function (obj) {
             const shipMaterial = new THREE.MeshStandardMaterial({ 
                 color: 0x00aaff, 
@@ -257,25 +253,7 @@ HTML_CLIENT = """
 
             loadedShipModel = obj;
             loadedShipModel.scale.set(1.5, 1.5, 1.5);
-            console.log("OBJ model loaded successfully!");
         });
-
-        function createShipMesh(isLocal) {
-            const shipGroup = new THREE.Group();
-
-            if (loadedShipModel) {
-                const shipInstance = loadedShipModel.clone();
-                shipGroup.add(shipInstance);
-            } else {
-                const tempGeo = new THREE.ConeGeometry(5, 15, 8);
-                const tempMat = new THREE.MeshBasicMaterial({ color: isLocal ? 0x00ff00 : 0xff0000 });
-                const tempMesh = new THREE.Mesh(tempGeo, tempMat);
-                tempMesh.rotation.x = Math.PI / 2;
-                shipGroup.add(tempMesh);
-            }
-
-            return shipGroup;
-        }
 
         const GLOBAL_SEED = 987654321;
 
@@ -285,9 +263,7 @@ HTML_CLIENT = """
         }
 
         const planetTextureCache = {};
-        // ==============================================================================
-        // GLOBAL PLANET TEMPERATURE SYSTEM
-        // ==============================================================================
+
         function generatePlanetTextures(seed) {
             if (planetTextureCache[seed]) {
                 return planetTextureCache[seed];
@@ -301,49 +277,41 @@ HTML_CLIENT = """
             let s = seed;
             const rand = () => { s += 1; return seededRandom(s); };
 
-            // Determine planet temperature category (0.0 to 1.0)
             const globalTemp = rand(); 
 
             let baseColor, continentColor, detailColor, capColor, isLava = false;
 
             if (globalTemp > 0.82) {
-                // EXTREME HOT: Volcanic Lava World
-                baseColor = '#1a0b0b';       // Dark Basalt Crust
-                continentColor = '#e63900';  // Molten Rivers
-                detailColor = '#ffaa00';     // Glowing Magma Fissures
-                capColor = null;             // No ice caps
+                baseColor = '#1a0b0b';
+                continentColor = '#e63900';
+                detailColor = '#ffaa00';
+                capColor = null;
                 isLava = true;
             } else if (globalTemp > 0.62) {
-                // HOT: Arid Desert Planet
-                baseColor = '#8c593b';       // Dry Dunes
-                continentColor = '#d99b00';  // Sand Basins
-                detailColor = '#ffcc66';     // Salt Flats / Light Sand
-                capColor = null;             // No ice caps
+                baseColor = '#8c593b';
+                continentColor = '#d99b00';
+                detailColor = '#ffcc66';
+                capColor = null;
             } else if (globalTemp > 0.38) {
-                // TEMPERATE: Earth-like Planet
-                baseColor = '#0b3d91';       // Oceans
-                continentColor = '#3a7d44';  // Foliage
-                detailColor = '#24522c';     // Mountain ranges
-                capColor = '#ffffff';        // Polar Caps
+                baseColor = '#0b3d91';
+                continentColor = '#3a7d44';
+                detailColor = '#24522c';
+                capColor = '#ffffff';
             } else if (globalTemp > 0.18) {
-                // COLD: Tundra & Glacial World
-                baseColor = '#2b4450';       // Frozen Deep Waters
-                continentColor = '#607d8b';  // Rocky Tundra Lands
-                detailColor = '#8ca3ad';     // Snow-dusted Peaks
-                capColor = '#e0f7fa';        // Expanded Ice Caps
+                baseColor = '#2b4450';
+                continentColor = '#607d8b';
+                detailColor = '#8ca3ad';
+                capColor = '#e0f7fa';
             } else {
-                // EXTREME COLD: Frozen Ice World
-                baseColor = '#b2ebf2';       // Glacial Ice Base
-                continentColor = '#e0f7fa';  // Deep Snowfields
-                detailColor = '#ffffff';     // Pure White Glaciers
-                capColor = '#ffffff';        // Entirely Ice Capped
+                baseColor = '#b2ebf2';
+                continentColor = '#e0f7fa';
+                detailColor = '#ffffff';
+                capColor = '#ffffff';
             }
 
-            // 1. Draw Global Base Layer
             ctx.fillStyle = baseColor;
             ctx.fillRect(0, 0, 512, 256);
 
-            // 2. Draw Temperature-Specific Surface Formations
             const continentCount = 4 + Math.floor(rand() * 5);
 
             for (let c = 0; c < continentCount; c++) {
@@ -368,7 +336,6 @@ HTML_CLIENT = """
                 ctx.fillStyle = continentColor;
                 ctx.fill();
 
-                // Detail Layer (Mountain Chains / Magma Veins)
                 ctx.beginPath();
                 for (let i = 0; i < points; i++) {
                     const angle = (i / points) * Math.PI * 2;
@@ -385,17 +352,14 @@ HTML_CLIENT = """
                 ctx.fill();
             }
 
-            // 3. Ice Caps (Only apply if the temperature permits)
             if (capColor) {
                 ctx.fillStyle = capColor;
                 const capRadius = globalTemp < 0.18 ? 90 : 45 + rand() * 15;
 
-                // North Cap
                 ctx.beginPath();
                 ctx.arc(256, 0, capRadius, 0, Math.PI * 2);
                 ctx.fill();
 
-                // South Cap
                 ctx.beginPath();
                 ctx.arc(256, 256, capRadius, 0, Math.PI * 2);
                 ctx.fill();
@@ -410,9 +374,6 @@ HTML_CLIENT = """
             return res;
         }
 
-        // ==============================================================================
-        // PLANET CLUSTER SYSTEM MANAGER
-        // ==============================================================================
         const CLUSTER_GRID_SIZE = 150000;
         const CLUSTER_DRAW_RADIUS = 1; 
         const UNLOAD_DISTANCE_THRESHOLD = 350000; 
@@ -523,9 +484,6 @@ HTML_CLIENT = """
             document.getElementById('planet-count').innerText = totalPlanets;
         }
 
-        // ==============================================================================
-        // NEAREST PLANET POINTER LOGIC
-        // ==============================================================================
         const arrowEl = document.getElementById('nav-arrow');
         const textEl = document.getElementById('nav-text');
 
@@ -612,9 +570,6 @@ HTML_CLIENT = """
             textEl.innerText = `${formattedDist}m`;
         }
 
-        // ==============================================================================
-        // UNIFORM SPHERICAL STAR POOL
-        // ==============================================================================
         function createStarGlowTexture() {
             const canvas = document.createElement('canvas');
             canvas.width = 32;
@@ -701,9 +656,6 @@ HTML_CLIENT = """
             posAttr.needsUpdate = true;
         }
 
-        // ==============================================================================
-        // DYNAMIC ORIGIN LINE & EXHAUST PARTICLES
-        // ==============================================================================
         const lineGeo = new THREE.BufferGeometry();
         const linePositions = new Float32Array(6); 
         lineGeo.setAttribute('position', new THREE.BufferAttribute(linePositions, 3));
@@ -744,9 +696,6 @@ HTML_CLIENT = """
             }
         }
 
-        // ==============================================================================
-        // 3D MODEL FACTORIES
-        // ==============================================================================
         function createShipMesh(isLocal) {
             const group = new THREE.Group();
 
@@ -793,9 +742,6 @@ HTML_CLIENT = """
         const stationMesh = createStationMesh();
         scene.add(stationMesh);
 
-        // ==============================================================================
-        // CLIENT STATE & WEBSOCKET HANDLING
-        // ==============================================================================
         const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const wsUrl = `${wsProtocol}//${window.location.host}/ws`;
         const ws = new WebSocket(wsUrl);
@@ -803,8 +749,8 @@ HTML_CLIENT = """
         let localPlayerId = null;
         let gameState = { players: {} };
         const shipMeshes = {};
-        const keys = {}
-        let inventory = {'iron':0, 'gold':0, 'silver':0, 'money':0}
+        const keys = {};
+        let inventory = { 'iron': 0, 'gold': 0, 'silver': 0, 'money': 100 };
 
         window.addEventListener('keydown', e => { keys[e.key] = true; });
         window.addEventListener('keyup', e => { keys[e.key] = false; });
@@ -843,16 +789,14 @@ HTML_CLIENT = """
                 document.getElementById('player-count').innerText = Object.keys(data.gameState.players).length;
             }
         };
-        // =========================================
-        // ITEMS & INVENTORY
-        // =========================================
+
         function updateUI() {
-            document.getElementById('money').textContent = inventory.money;
-            document.getElementById('iron').textContent = inventory.iron;
-            document.getElementById('gold').textContent = inventory.gold;
-            document.getElementById('silver').textContent = inventory.silver;
+            document.getElementById('money').textContent = inventory.money || 0;
+            document.getElementById('iron').textContent = inventory.iron || 0;
+            document.getElementById('gold').textContent = inventory.gold || 0;
+            document.getElementById('silver').textContent = inventory.silver || 0;
         }
-        // Toggle Visibility Function
+
         function toggleItemMenu() {
             const menu = document.getElementById('item-menu');
             if (menu.style.display === 'none' || menu.style.display === '') {
@@ -861,40 +805,27 @@ HTML_CLIENT = """
                 menu.style.display = 'none';
             }
         }
-        window.addEventListener('keydown', e => {
-        keys[e.key] = true;
-    
-        // Toggle menu ONCE per press (ignores key holding)
-        if ((e.key === 'i' || e.key === 'I') && !e.repeat) {
-            toggleItemMenu();
-        }
-    });
-    
-    window.addEventListener('keyup', e => {
-        keys[e.key] = false;
-    });
 
-        // =========================================
-        // TRADING AND VALUES
-        // =========================================
+        window.addEventListener('keydown', e => {
+            if ((e.key === 'i' || e.key === 'I') && !e.repeat) {
+                toggleItemMenu();
+            }
+        });
+
         const tradePrices = {
             iron:   { buy: 10, sell: 7 },
             gold:   { buy: 50, sell: 35 },
             silver: { buy: 25, sell: 15 }
         };
-        // Track trading state and max station interaction distance
         let isTrading = false;
-        const TRADE_DISTANCE = 50; // Max distance from (0,0,0) to trade
+        const TRADE_DISTANCE = 50; 
         
-        // Toggle Trade Window (e.g., pressing 'T')
         function toggleTradeMenu() {
             const tradeMenu = document.getElementById('trade-menu');
             const me = gameState.players[localPlayerId];
             
-            // Safety check in case player state hasn't initialized yet
             if (!me) return;
         
-            // Check distance to station at (0,0,0) using active local player position
             const distance = Math.sqrt(
                 me.x ** 2 + 
                 me.y ** 2 + 
@@ -902,21 +833,16 @@ HTML_CLIENT = """
             );
         
             if (!isTrading) {
-                // Only open if close enough to the station
                 if (distance <= TRADE_DISTANCE) {
                     isTrading = true;
                     tradeMenu.style.display = 'block';
-                } else {
-                    console.log("Too far from station to trade!");
                 }
             } else {
-                // Close menu if open
                 isTrading = false;
                 tradeMenu.style.display = 'none';
             }
         }
         
-        // Key listener for 'T' key and 'Escape'
         window.addEventListener('keydown', (e) => {
             if (e.key.toLowerCase() === 't') {
                 toggleTradeMenu();
@@ -925,21 +851,18 @@ HTML_CLIENT = """
                 document.getElementById('trade-menu').style.display = 'none';
             }
         });
-        // Buy Resource Function
+
         function buyResource(resource) {
             const config = tradePrices[resource];
             if (!config) return;
         
             if (inventory.money >= config.buy) {
                 inventory.money -= config.buy;
-                inventory[resource] += 1;
+                inventory[resource] = (inventory[resource] || 0) + 1;
                 updateUI();
-            } else {
-                console.log("Not enough money to buy " + resource);
             }
         }
         
-        // Sell Resource Function
         function sellResource(resource) {
             const config = tradePrices[resource];
             if (!config) return;
@@ -948,91 +871,71 @@ HTML_CLIENT = """
                 inventory[resource] -= 1;
                 inventory.money += config.sell;
                 updateUI();
-            } else {
-                console.log("Not enough " + resource + " to sell");
             }
         }
-        // =========================================
-        // PHYSICS & INPUT
-        // =========================================
+
         function updateLocalPhysics() {
             if (localPlayerId && gameState.players[localPlayerId]) {
                 const me = gameState.players[localPlayerId];
                 
-                // Handle Inventory Key (M)
                 if (keys['m'] || keys['M']) {
-                    inventory.iron += 5;
-                    inventory.money += 5;
+                    inventory.iron = (inventory.iron || 0) + 5;
+                    inventory.money = (inventory.money || 0) + 5;
                     updateUI();
                     keys['m'] = false; 
                     keys['M'] = false;
                 }
                 
-                // 1. Sanitize velocity vectors
                 if (!me.vx || isNaN(me.vx)) me.vx = 0;
                 if (!me.vy || isNaN(me.vy)) me.vy = 0;
                 if (!me.vz || isNaN(me.vz)) me.vz = 0;
                 
-                // 2. Read inputs
                 const isThrusting = keys['ArrowUp'] || keys['w'] || keys['W'];
                 const isBoosting = keys['Shift'];
                 
-                // Steering
                 if (keys['ArrowLeft'] || keys['a'] || keys['A']) me.angle -= 0.03;
                 if (keys['ArrowRight'] || keys['d'] || keys['D']) me.angle += 0.03;
                 
-                // Vertical movement controls (Z-axis)
                 if (keys['x'] || keys['X']) me.vz += 0.85;
                 if (keys['z'] || keys['Z']) me.vz -= 0.85;
                 
-                // Reverse / Braking key (S)
                 if (keys['ArrowDown'] || keys['s'] || keys['S']) {
                     me.vx *= 0.95;
                     me.vy *= 0.95;
                     me.vz *= 0.90;
                 }
         
-                // 3. Speed Caps & Dynamic Acceleration
                 const maxSpeed = isBoosting ? 100 : 50;
                 let currentSpeed = Math.sqrt(me.vx * me.vx + me.vy * me.vy + me.vz * me.vz);
         
-                // Apply forward engine thrust unconditionally when thrusting
                 if (isThrusting) {
                     const baseAccel = isBoosting ? 1.0 : 0.4;
                     const dragFactor = 0.013;
                     const effectiveThrust = baseAccel + (currentSpeed * dragFactor);
                     
-                    // Add thrust in the current facing direction
                     me.vx += Math.sin(me.angle) * effectiveThrust;
                     me.vy -= Math.cos(me.angle) * effectiveThrust;
                     
-                    // Spawn engine particles while accelerating
                     spawnTrailParticle(me.x, me.y, me.z, me.angle);
                 }
         
-                // Recalculate total speed after applying thrust/inputs
                 currentSpeed = Math.sqrt(me.vx * me.vx + me.vy * me.vy + me.vz * me.vz);
         
-                // 4. Clamping & Decay Management
                 if (currentSpeed > maxSpeed) {
-                    // Scale velocity vector back to maxSpeed without changing movement direction
                     const scale = maxSpeed / currentSpeed;
                     me.vx *= scale;
                     me.vy *= scale;
                     me.vz *= scale;
                 } else if (!isThrusting) {
-                    // Standard space friction (only applies when coasting)
                     me.vx *= 0.987;
                     me.vy *= 0.987;
                     me.vz *= 0.950;
                 }
         
-                // 5. Update Position
                 me.x += me.vx;
                 me.y += me.vy;
                 me.z += me.vz;
         
-                // 6. Planetary Collision Resolution
                 const shipRadius = 12;
                 for (let key in planetObjects) {
                     const planet = planetObjects[key];
@@ -1065,7 +968,6 @@ HTML_CLIENT = """
                     }
                 }
         
-                // 7. Sync over WebSocket
                 if (ws.readyState === WebSocket.OPEN) {
                     ws.send(JSON.stringify({ 
                         type: 'sync', x: me.x, y: me.y, z: me.z, angle: me.angle, vx: me.vx, vy: me.vy, vz: me.vz 
@@ -1101,7 +1003,6 @@ HTML_CLIENT = """
 
             stationMesh.rotation.y += 0.005;
 
-            // Smooth planet spin
             for (let key in planetObjects) {
                 if (planetObjects[key] && planetObjects[key].mesh) {
                     planetObjects[key].mesh.rotation.y += 0.001;
@@ -1156,6 +1057,7 @@ HTML_CLIENT = """
 
             renderer.render(scene, camera);
         }
+
         // =========================================
         // SAVE & ACCOUNT CLIENT LOGIC
         // =========================================
@@ -1164,6 +1066,10 @@ HTML_CLIENT = """
         async function handleRegister() {
             const u = document.getElementById('username').value;
             const p = document.getElementById('password').value;
+            if (!u || !p) {
+                document.getElementById('auth-msg').innerText = "Username & password required";
+                return;
+            }
             const res = await fetch('/api/register', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -1176,6 +1082,10 @@ HTML_CLIENT = """
         async function handleLogin() {
             const u = document.getElementById('username').value;
             const p = document.getElementById('password').value;
+            if (!u || !p) {
+                document.getElementById('auth-msg').innerText = "Username & password required";
+                return;
+            }
             const res = await fetch('/api/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -1189,14 +1099,13 @@ HTML_CLIENT = """
                 currentUser = data;
                 document.getElementById('auth-overlay').style.display = 'none';
 
-                // Load database position and inventory into local state
                 if (gameState.players[localPlayerId]) {
                     gameState.players[localPlayerId].x = data.saveData.position.x;
                     gameState.players[localPlayerId].y = data.saveData.position.y;
                     gameState.players[localPlayerId].z = data.saveData.position.z;
                 }
-                inventory = data.saveData.inventory;
-                inventory.money = data.saveData.money;
+                inventory = data.saveData.inventory || { iron: 0, gold: 0, silver: 0 };
+                inventory.money = data.saveData.money || 100;
                 updateUI();
             }
         }
@@ -1215,11 +1124,11 @@ HTML_CLIENT = """
                     inventory: inventory
                 })
             });
-            console.log("Game saved automatically");
         }
 
         // Auto-save every 30 seconds
         setInterval(saveProgress, 30000);
+        
         animate();
     </script>
 </body>
@@ -1304,7 +1213,6 @@ async def save_game(data: SaveRequest):
     conn.close()
     return {"success": True}
 
-# Multiplayer WebSockets
 game_state = {"players": {}}
 
 @app.get("/")
@@ -1334,7 +1242,6 @@ async def websocket_endpoint(websocket: WebSocket):
 
 async def broadcast_loop():
     while True:
-        # In a real setup, send to connected WS instances
         await asyncio.sleep(1 / 30)
 
 @app.on_event("startup")
