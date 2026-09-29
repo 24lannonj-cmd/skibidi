@@ -3,11 +3,45 @@
 
 import asyncio
 import json
+import sqlite3
+import hashlib
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
+from pydantic import BaseModel
 
 app = FastAPI()
+def init_db():
+    conn = sqlite3.connect("game.db")
+    cursor = conn.cursor()
+    
+    # Users Table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE,
+            password TEXT
+        )
+    """)
+    
+    # Player Save Data Table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS player_data (
+            user_id INTEGER PRIMARY KEY,
+            x REAL DEFAULT 200,
+            y REAL DEFAULT 0,
+            z REAL DEFAULT 0,
+            money INTEGER DEFAULT 100,
+            inventory TEXT DEFAULT '{"iron": 0, "gold": 0, "silver": 0}',
+            FOREIGN KEY(user_id) REFERENCES users(id)
+        )
+    """)
+    conn.commit()
+    conn.close()
 
+init_db()
+
+def hash_password(password: str) -> str:
+    return hashlib.sha256(password.encode()).hexdigest()
 # ==============================================================================
 # 1. FRONTEND HTML & CSS LAYOUT
 # ==============================================================================
@@ -1169,38 +1203,83 @@ HTML_CLIENT = """
 # ==============================================================================
 # BACKEND GAME STATE & FASTAPI SERVER
 # ==============================================================================
-game_state = {
-    "station": {"x": 0, "y": 0, "radius": 80},
-    "players": {}
-}
+class AuthRequest(BaseModel):
+    username: str
+    password: str
 
-class ConnectionManager:
-    def __init__(self):
-        self.active_connections: dict[str, WebSocket] = {}
+class SaveRequest(BaseModel):
+    userId: int
+    position: dict
+    money: int
+    inventory: dict
 
-    async def connect(self, websocket: WebSocket, player_id: str):
-        await websocket.accept()
-        self.active_connections[player_id] = websocket
-        game_state["players"][player_id] = {
-            "x": 200, "y": 0, "z": 0, "angle": 0, "vx": 0, "vy": 0, "vz": 0
+@app.post("/api/register")
+async def register(data: AuthRequest):
+    conn = sqlite3.connect("game.db")
+    cursor = conn.cursor()
+    try:
+        hashed_pass = hash_password(data.password)
+        cursor.execute("INSERT INTO users (username, password) VALUES (?, ?)", (data.username, hashed_pass))
+        user_id = cursor.lastrowid
+        cursor.execute("INSERT INTO player_data (user_id) VALUES (?)", (user_id,))
+        conn.commit()
+        return {"success": True, "userId": user_id}
+    except sqlite3.IntegrityError:
+        return {"error": "Username already taken"}
+    finally:
+        conn.close()
+
+@app.post("/api/login")
+async def login(data: AuthRequest):
+    conn = sqlite3.connect("game.db")
+    cursor = conn.cursor()
+    hashed_pass = hash_password(data.password)
+    
+    cursor.execute("SELECT id, username FROM users WHERE username = ? AND password = ?", (data.username, hashed_pass))
+    user = cursor.fetchone()
+    
+    if not user:
+        conn.close()
+        return {"error": "Invalid username or password"}
+    
+    user_id, username = user
+    cursor.execute("SELECT x, y, z, money, inventory FROM player_data WHERE user_id = ?", (user_id,))
+    row = cursor.fetchone()
+    conn.close()
+
+    return {
+        "success": True,
+        "userId": user_id,
+        "username": username,
+        "saveData": {
+            "position": {"x": row[0], "y": row[1], "z": row[2]},
+            "money": row[3],
+            "inventory": json.loads(row[4])
         }
-        await websocket.send_text(json.dumps({"type": "init", "id": player_id}))
+    }
 
-    def disconnect(self, player_id: str):
-        if player_id in self.active_connections:
-            del self.active_connections[player_id]
-        if player_id in game_state["players"]:
-            del game_state["players"][player_id]
+@app.post("/api/save")
+async def save_game(data: SaveRequest):
+    conn = sqlite3.connect("game.db")
+    cursor = conn.cursor()
+    cursor.execute("""
+        UPDATE player_data 
+        SET x = ?, y = ?, z = ?, money = ?, inventory = ? 
+        WHERE user_id = ?
+    """, (
+        data.position.get("x", 0), 
+        data.position.get("y", 0), 
+        data.position.get("z", 0), 
+        data.money, 
+        json.dumps(data.inventory), 
+        data.userId
+    ))
+    conn.commit()
+    conn.close()
+    return {"success": True}
 
-    async def broadcast_state(self):
-        payload = json.dumps({"type": "state", "gameState": game_state})
-        for connection in list(self.active_connections.values()):
-            try:
-                await connection.send_text(payload)
-            except Exception:
-                pass
-
-manager = ConnectionManager()
+# Multiplayer WebSockets
+game_state = {"players": {}}
 
 @app.get("/")
 async def get():
@@ -1208,31 +1287,30 @@ async def get():
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
+    await websocket.accept()
     player_id = str(id(websocket))
-    await manager.connect(websocket, player_id)
+    game_state["players"][player_id] = {"x": 200, "y": 0, "z": 0, "angle": 0}
+    await websocket.send_text(json.dumps({"type": "init", "id": player_id}))
+
     try:
         while True:
             data = await websocket.receive_text()
             payload = json.loads(data)
-            
             if payload.get("type") == "sync":
-                player = game_state["players"].get(player_id)
-                if player:
-                    player["x"] = payload.get("x", player["x"])
-                    player["y"] = payload.get("y", player["y"])
-                    player["z"] = payload.get("z", player["z"])
-                    player["angle"] = payload.get("angle", player["angle"])
-                    player["vx"] = payload.get("vx", player["vx"])
-                    player["vy"] = payload.get("vy", player["vy"])
-                    player["vz"] = payload.get("vz", player.get("vz", 0))
+                p = game_state["players"].get(player_id)
+                if p:
+                    p["x"] = payload.get("x", p["x"])
+                    p["y"] = payload.get("y", p["y"])
+                    p["z"] = payload.get("z", p["z"])
     except WebSocketDisconnect:
-        manager.disconnect(player_id)
+        if player_id in game_state["players"]:
+            del game_state["players"][player_id]
 
-async def game_loop():
+async def broadcast_loop():
     while True:
-        await manager.broadcast_state()
+        # In a real setup, send to connected WS instances
         await asyncio.sleep(1 / 30)
 
 @app.on_event("startup")
 async def startup_event():
-    asyncio.create_task(game_loop())
+    asyncio.create_task(broadcast_loop())
