@@ -16,8 +16,9 @@ import anyio
 # ==============================================================================
 # DATABASE SETUP
 # ==============================================================================
-TURSO_URL = os.getenv("libsql://spacegame-nc-phantom.aws-eu-west-1.turso.io")
-TURSO_TOKEN = os.getenv("eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3OTA3NzQzNDAsImlkIjoiMDFhMGYyNzYtNzkwMS03MDU2LTg0NTMtZjhkYWRmYTQzYzY0Iiwia2lkIjoiN1dPN292TUpxdU84dnFiSDFsZGxZTEJlSmlUV0hzY3Zrb3pMTi1wNEI2YyIsInJpZCI6IjMzYmFjOTc2LTY5ZjktNDcyYy04ZTc1LTg5ODI2MjU5YWM3NCJ9.P3pTxj8u7SuW-QqTpTMBnVb6cndYWZXJ2l5tQw0tis6lTAzR-bWmS4v17Qsf18QWK6nVQyhF645dssnjpo6bAw")
+
+TURSO_URL = os.getenv("TURSO_URL", "libsql://spacegame-nc-phantom.aws-eu-west-1.turso.io")
+TURSO_TOKEN = os.getenv("TURSO_TOKEN", "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3OTA3NzQzNDAsImlkIjoiMDFhMGYyNzYtNzkwMS03MDU2LTg0NTMtZjhkYWRmYTQzYzY0Iiwia2lkIjoiN1dPN292TUpxdU84dnFiSDFsZGxZTEJlSmlUV0hzY3Zrb3pMTi1wNEI2YyIsInJpZCI6IjMzYmFjOTc2LTY5ZjktNDcyYy04ZTc1LTg5ODI2MjU5YWM3NCJ9.P3pTxj8u7SuW-QqTpTMBnVb6cndYWZXJ2l5tQw0tis6lTAzR-bWmS4v17Qsf18QWK6nVQyhF645dssnjpo6bAw")
 
 def get_db_connection():
     # Uses Turso Cloud DB if credentials exist, otherwise falls back to local SQLite
@@ -994,10 +995,6 @@ def db_save(data: SaveRequest):
     conn.commit()
     conn.close()
     return {"success": True}
-
-@app.post("/api/save")
-async def save_game(data: SaveRequest):
-    return await anyio.to_thread.run_sync(db_save, data)
 
 @app.post("/api/save")
 async def save_game(data: SaveRequest):
