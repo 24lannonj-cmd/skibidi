@@ -13,7 +13,6 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 import anyio
 
-# Safely handle optional libsql dependency
 try:
     import libsql
     HAS_LIBSQL = True
@@ -191,7 +190,7 @@ HTML_CLIENT = """
             <input type="text" id="username" placeholder="Username" style="width: 90%; padding: 8px; margin: 8px 0; background: #111; color: #00ffff; border: 1px solid #00ffff; border-radius: 4px;" />
             <input type="password" id="password" placeholder="Password" style="width: 90%; padding: 8px; margin: 8px 0; background: #111; color: #00ffff; border: 1px solid #00ffff; border-radius: 4px;" />
             <p id="auth-msg" style="color: #ff3344; font-size: 12px; margin: 5px 0;"></p>
-            <div style="display: flex; justify-style: space-around; margin-top: 10px;">
+            <div style="display: flex; justify-content: space-around; margin-top: 10px;">
                 <button onclick="handleLogin()" style="padding: 8px 15px; background: #00ffff; color: #000; font-weight: bold; border: none; border-radius: 4px; cursor: pointer;">Login</button>
                 <button onclick="handleRegister()" style="padding: 8px 15px; background: #00ffff; color: #000; font-weight: bold; border: none; border-radius: 4px; cursor: pointer;">Register</button>
             </div>
@@ -599,9 +598,10 @@ HTML_CLIENT = """
                     }
 
                     if (currentUser && currentUser.saveData && currentUser.saveData.position) {
-                        gameState.players[localPlayerId].x = currentUser.saveData.position.x ?? 200;
-                        gameState.players[localPlayerId].y = currentUser.saveData.position.y ?? 0;
-                        gameState.players[localPlayerId].z = currentUser.saveData.position.z ?? 0;
+                        const pos = currentUser.saveData.position;
+                        gameState.players[localPlayerId].x = Number.isFinite(pos.x) ? pos.x : 200;
+                        gameState.players[localPlayerId].y = Number.isFinite(pos.y) ? pos.y : 0;
+                        gameState.players[localPlayerId].z = Number.isFinite(pos.z) ? pos.z : 0;
                     }
 
                     if (shipMeshes[localPlayerId]) {
@@ -669,7 +669,7 @@ HTML_CLIENT = """
             const me = gameState.players[localPlayerId];
             if (!me) return;
         
-            const distance = Math.sqrt(me.x ** 2 + me.y ** 2 + (me.z || 0) ** 2);
+            const distance = Math.sqrt((me.x || 0) ** 2 + (me.y || 0) ** 2 + (me.z || 0) ** 2);
             if (!isTrading && distance <= TRADE_DISTANCE) {
                 isTrading = true;
                 tradeMenu.style.display = 'block';
@@ -709,9 +709,14 @@ HTML_CLIENT = """
             if (localPlayerId && gameState.players[localPlayerId]) {
                 const me = gameState.players[localPlayerId];
                 
-                if (!me.vx || isNaN(me.vx)) me.vx = 0;
-                if (!me.vy || isNaN(me.vy)) me.vy = 0;
-                if (!me.vz || isNaN(me.vz)) me.vz = 0;
+                // Sanitize numbers to prevent NaN rendering drops
+                if (!Number.isFinite(me.x)) me.x = 200;
+                if (!Number.isFinite(me.y)) me.y = 0;
+                if (!Number.isFinite(me.z)) me.z = 0;
+                if (!Number.isFinite(me.angle)) me.angle = 0;
+                if (!Number.isFinite(me.vx)) me.vx = 0;
+                if (!Number.isFinite(me.vy)) me.vy = 0;
+                if (!Number.isFinite(me.vz)) me.vz = 0;
                 
                 const isThrusting = keys['ArrowUp'] || keys['w'] || keys['W'];
                 const isBoosting = keys['Shift'];
@@ -822,16 +827,21 @@ HTML_CLIENT = """
                     scene.add(shipMeshes[id]);
                 }
 
+                const posX = Number.isFinite(p.x) ? p.x : 200;
+                const posY = Number.isFinite(p.y) ? p.y : 0;
+                const posZ = Number.isFinite(p.z) ? p.z : 0;
+                const angle = Number.isFinite(p.angle) ? p.angle : 0;
+
                 if (id === localPlayerId) {
-                    shipMeshes[id].position.x = p.x;
-                    shipMeshes[id].position.y = p.z || 0;
-                    shipMeshes[id].position.z = p.y;
-                    shipMeshes[id].rotation.y = -p.angle;
+                    shipMeshes[id].position.x = posX;
+                    shipMeshes[id].position.y = posZ;
+                    shipMeshes[id].position.z = posY;
+                    shipMeshes[id].rotation.y = -angle;
                 } else {
-                    shipMeshes[id].position.x += (p.x - shipMeshes[id].position.x) * 0.25;
-                    shipMeshes[id].position.y += ((p.z || 0) - shipMeshes[id].position.y) * 0.25;
-                    shipMeshes[id].position.z += (p.y - shipMeshes[id].position.z) * 0.25;
-                    shipMeshes[id].rotation.y += (-p.angle - shipMeshes[id].rotation.y) * 0.25;
+                    shipMeshes[id].position.x += (posX - shipMeshes[id].position.x) * 0.25;
+                    shipMeshes[id].position.y += (posZ - shipMeshes[id].position.y) * 0.25;
+                    shipMeshes[id].position.z += (posY - shipMeshes[id].position.z) * 0.25;
+                    shipMeshes[id].rotation.y += (-angle - shipMeshes[id].rotation.y) * 0.25;
                 }
             }
 
@@ -907,9 +917,19 @@ HTML_CLIENT = """
                         if (!gameState.players[localPlayerId]) {
                             gameState.players[localPlayerId] = { angle: 0, vx: 0, vy: 0, vz: 0 };
                         }
-                        gameState.players[localPlayerId].x = data.saveData.position.x ?? 200;
-                        gameState.players[localPlayerId].y = data.saveData.position.y ?? 0;
-                        gameState.players[localPlayerId].z = data.saveData.position.z ?? 0;
+                        const pos = data.saveData.position || {};
+                        gameState.players[localPlayerId].x = Number.isFinite(pos.x) ? pos.x : 200;
+                        gameState.players[localPlayerId].y = Number.isFinite(pos.y) ? pos.y : 0;
+                        gameState.players[localPlayerId].z = Number.isFinite(pos.z) ? pos.z : 0;
+                        gameState.players[localPlayerId].angle = 0;
+                        gameState.players[localPlayerId].vx = 0;
+                        gameState.players[localPlayerId].vy = 0;
+                        gameState.players[localPlayerId].vz = 0;
+
+                        if (shipMeshes[localPlayerId]) {
+                            scene.remove(shipMeshes[localPlayerId]);
+                            delete shipMeshes[localPlayerId];
+                        }
 
                         if (ws && ws.readyState === WebSocket.OPEN) {
                             ws.send(JSON.stringify({
@@ -987,7 +1007,7 @@ def db_register(username, password):
         if not user_id:
             return {"error": "Failed to create user record."}
 
-        cursor.execute("INSERT INTO player_data (user_id) VALUES (?)", (user_id,))
+        cursor.execute("INSERT INTO player_data (user_id, x, y, z, money) VALUES (?, 200, 0, 0, 100)", (user_id,))
         conn.commit()
         return {"success": True, "userId": user_id}
     except Exception as e:
@@ -1033,8 +1053,12 @@ def db_login(username, password):
         "userId": user_id,
         "username": uname,
         "saveData": {
-            "position": {"x": row[0], "y": row[1], "z": row[2]},
-            "money": row[3],
+            "position": {
+                "x": row[0] if row[0] is not None else 200,
+                "y": row[1] if row[1] is not None else 0,
+                "z": row[2] if row[2] is not None else 0
+            },
+            "money": row[3] if row[3] is not None else 100,
             "inventory": json.loads(row[4]) if row[4] else {"iron": 0, "gold": 0, "silver": 0}
         }
     }
@@ -1051,7 +1075,7 @@ def db_save(data: SaveRequest):
         SET x = ?, y = ?, z = ?, money = ?, inventory = ? 
         WHERE user_id = ?
     """, (
-        data.position.get("x", 0), 
+        data.position.get("x", 200), 
         data.position.get("y", 0), 
         data.position.get("z", 0), 
         data.money, 
