@@ -16,6 +16,14 @@ import anyio
 # ==============================================================================
 # DATABASE SETUP
 # ==============================================================================
+TURSO_URL = os.getenv("libsql://spacegame-nc-phantom.aws-eu-west-1.turso.io")
+TURSO_TOKEN = os.getenv("eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3OTA3NzQzNDAsImlkIjoiMDFhMGYyNzYtNzkwMS03MDU2LTg0NTMtZjhkYWRmYTQzYzY0Iiwia2lkIjoiN1dPN292TUpxdU84dnFiSDFsZGxZTEJlSmlUV0hzY3Zrb3pMTi1wNEI2YyIsInJpZCI6IjMzYmFjOTc2LTY5ZjktNDcyYy04ZTc1LTg5ODI2MjU5YWM3NCJ9.P3pTxj8u7SuW-QqTpTMBnVb6cndYWZXJ2l5tQw0tis6lTAzR-bWmS4v17Qsf18QWK6nVQyhF645dssnjpo6bAw")
+
+def get_db_connection():
+    # Uses Turso Cloud DB if credentials exist, otherwise falls back to local SQLite
+    if TURSO_URL and TURSO_TOKEN:
+        return libsql.connect(database=TURSO_URL, auth_token=TURSO_TOKEN)
+    return sqlite3.connect("game.db")
 def init_db():
     conn = sqlite3.connect("game.db")
     cursor = conn.cursor()
@@ -918,7 +926,7 @@ class SaveRequest(BaseModel):
     inventory: dict
 
 def db_register(username, password):
-    conn = sqlite3.connect("game.db")
+    conn = get_db_connection()
     cursor = conn.cursor()
     try:
         hashed_pass = hash_password(password)
@@ -937,7 +945,7 @@ async def register(data: AuthRequest):
     return await anyio.to_thread.run_sync(db_register, data.username, data.password)
 
 def db_login(username, password):
-    conn = sqlite3.connect("game.db")
+    conn = get_db_connection()
     cursor = conn.cursor()
     hashed_pass = hash_password(password)
     
@@ -969,7 +977,7 @@ async def login(data: AuthRequest):
     return await anyio.to_thread.run_sync(db_login, data.username, data.password)
 
 def db_save(data: SaveRequest):
-    conn = sqlite3.connect("game.db")
+    conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("""
         UPDATE player_data 
@@ -986,6 +994,10 @@ def db_save(data: SaveRequest):
     conn.commit()
     conn.close()
     return {"success": True}
+
+@app.post("/api/save")
+async def save_game(data: SaveRequest):
+    return await anyio.to_thread.run_sync(db_save, data)
 
 @app.post("/api/save")
 async def save_game(data: SaveRequest):
