@@ -869,11 +869,25 @@ HTML_CLIENT = """
                 } else {
                     currentUser = data;
                     document.getElementById('auth-overlay').style.display = 'none';
-
+        
                     if (gameState.players[localPlayerId]) {
-                        gameState.players[localPlayerId].x = data.saveData.position.x;
-                        gameState.players[localPlayerId].y = data.saveData.position.y;
-                        gameState.players[localPlayerId].z = data.saveData.position.z;
+                        gameState.players[localPlayerId].x = data.saveData.position.x || 0;
+                        gameState.players[localPlayerId].y = data.saveData.position.y || 0;
+                        gameState.players[localPlayerId].z = data.saveData.position.z || 0;
+                        
+                        // Instantly notify the backend WebSocket state of the restored login position
+                        if (ws && ws.readyState === WebSocket.OPEN) {
+                            ws.send(JSON.stringify({ 
+                                type: 'sync', 
+                                x: gameState.players[localPlayerId].x, 
+                                y: gameState.players[localPlayerId].y, 
+                                z: gameState.players[localPlayerId].z, 
+                                angle: 0, 
+                                vx: 0, 
+                                vy: 0, 
+                                vz: 0 
+                            }));
+                        }
                     }
                     inventory = data.saveData.inventory || { iron: 0, gold: 0, silver: 0 };
                     inventory.money = data.saveData.money || 100;
