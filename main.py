@@ -3,7 +3,9 @@
 
 import asyncio
 import json
+import os
 import sqlite3
+import libsql_experimental as libsql
 import hashlib
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
