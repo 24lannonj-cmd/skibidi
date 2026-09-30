@@ -20,7 +20,6 @@ TURSO_URL = os.getenv("TURSO_URL", "libsql://spacegame-nc-phantom.aws-eu-west-1.
 TURSO_TOKEN = os.getenv("TURSO_TOKEN", "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3OTA3NzQzNDAsImlkIjoiMDFhMGYyNzYtNzkwMS03MDU2LTg0NTMtZjhkYWRmYTQzYzY0Iiwia2lkIjoiN1dPN292TUpxdU84dnFiSDFsZGxZTEJlSmlUV0hzY3Zrb3pMTi1wNEI2YyIsInJpZCI6IjMzYmFjOTc2LTY5ZjktNDcyYy04ZTc1LTg5ODI2MjU5YWM3NCJ9.P3pTxj8u7SuW-QqTpTMBnVb6cndYWZXJ2l5tQw0tis6lTAzR-bWmS4v17Qsf18QWK6nVQyhF645dssnjpo6bAw")
 
 def get_db_connection():
-    # Uses Turso Cloud DB if credentials exist, otherwise falls back to local SQLite
     if TURSO_URL and TURSO_TOKEN:
         return libsql.connect(database=TURSO_URL, auth_token=TURSO_TOKEN)
     return sqlite3.connect("game.db", timeout=10)
@@ -29,7 +28,6 @@ def init_db():
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    # Users Table
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -38,7 +36,6 @@ def init_db():
         )
     """)
     
-    # Player Save Data Table
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS player_data (
             user_id INTEGER PRIMARY KEY,
@@ -58,11 +55,9 @@ init_db()
 def hash_password(password: str) -> str:
     return hashlib.sha256(password.encode()).hexdigest()
 
-# Global Connection and Game State Tracking
 active_connections: list[WebSocket] = []
 game_state = {"players": {}}
 
-# Broadcast game updates 30 times a second
 async def broadcast_loop():
     while True:
         await asyncio.sleep(1 / 30)
@@ -75,7 +70,6 @@ async def broadcast_loop():
                     if connection in active_connections:
                         active_connections.remove(connection)
 
-# Lifespan Context Manager
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     task = asyncio.create_task(broadcast_loop())
@@ -85,16 +79,14 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 # ==============================================================================
-# 1. FRONTEND HTML & CSS LAYOUT
+# FRONTEND CLIENT
 # ==============================================================================
 HTML_CLIENT = """
 <!DOCTYPE html>
 <html>
 <head>
     <title>Infinite Synced Space Sandbox 3D</title>
-    <!-- Core Three.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-
     <style>
         body { 
             margin: 0; 
@@ -156,10 +148,7 @@ HTML_CLIENT = """
             z-index: 30;
             box-shadow: 0 0 10px rgba(0, 255, 255, 0.2);
         }
-        
-        #toggle-menu-btn:hover {
-            background: rgba(0, 255, 255, 0.2);
-        }
+        #toggle-menu-btn:hover { background: rgba(0, 255, 255, 0.2); }
         
         #item-menu {
             position: absolute;
@@ -175,8 +164,8 @@ HTML_CLIENT = """
     </style>
 </head>
 <body>
-    <!-- Login / Register Modal Overlay -->
-    <div id="auth-overlay" style="position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(5, 10, 20, 0.9); z-index: 2000; display: flex; justify-content: center; align-items: center; flex-direction: column;">
+    <!-- Auth Overlay -->
+    <div id="auth-overlay" style="position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(5, 10, 20, 0.85); z-index: 2000; display: flex; justify-content: center; align-items: center; flex-direction: column;">
         <div style="background: rgba(15, 20, 35, 0.95); border: 2px solid #00ffff; padding: 25px; border-radius: 8px; text-align: center; width: 280px;">
             <h2 style="color: #00ffff; margin-top: 0;">PILOT LOGIN</h2>
             <input type="text" id="username" placeholder="Username" style="width: 90%; padding: 8px; margin: 8px 0; background: #111; color: #00ffff; border: 1px solid #00ffff; border-radius: 4px;" />
@@ -189,7 +178,7 @@ HTML_CLIENT = """
         </div>
     </div>
 
-    <!-- Trade Window Overlay -->
+    <!-- Trade Overlay -->
     <div id="trade-menu" style="display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(15, 20, 30, 0.95); border: 2px solid #00d2ff; border-radius: 10px; padding: 20px; color: #fff; font-family: sans-serif; box-shadow: 0 0 20px rgba(0, 210, 255, 0.3); min-width: 320px; z-index: 1000;">
         <h2 style="margin-top: 0; text-align: center; color: #00d2ff; text-transform: uppercase; letter-spacing: 2px;">Station Trading Hub</h2>
         <p style="text-align: center; font-size: 0.9em; color: #aaa; margin-bottom: 20px;">Docked at Station (0, 0, 0)</p>
@@ -217,13 +206,13 @@ HTML_CLIENT = """
                 <button onclick="sellResource('gold')" style="background: #dc3545; color: white; border: none; padding: 6px 10px; border-radius: 4px;">Sell (35$)</button>
             </div>
         </div>
-    
         <p style="text-align: center; font-size: 0.8em; color: #888;">Press <kbd>T</kbd> or <kbd>ESC</kbd> to exit trade hub</p>
     </div>
 
+    <!-- HUD -->
     <div id="ui">
         <h3 style="margin-top: 0; color: #00ffff; text-shadow: 0 0 8px #00ffff;">3D Infinite Warp Flight Deck</h3>
-        <p>Position: X <span id="pos-x" class="stat">0</span> | Y <span id="pos-y" class="stat">0</span> | Z <span id="pos-z" class="stat">0</span></p>
+        <p>Position: X <span id="pos-x" class="stat">200</span> | Y <span id="pos-y" class="stat">0</span> | Z <span id="pos-z" class="stat">0</span></p>
         <p>Speed: <span id="speed" class="stat">0</span> m/s</p>
         <p>Pilots Online: <span id="player-count" class="stat">0</span></p>
         <p>Active Planets: <span id="planet-count" class="stat">0</span></p>
@@ -234,7 +223,7 @@ HTML_CLIENT = """
 
     <button id="toggle-menu-btn" onclick="toggleItemMenu()">🎒 Inventory (I)</button>
     <div id='item-menu'>
-        <p> Money: <span id='money' class='stat'>0</span></p>
+        <p> Money: <span id='money' class='stat'>100</span></p>
         <p> Iron: <span id='iron' class='stat'>0</span></p>
         <p> Gold: <span id='gold' class='stat'>0</span></p>
         <p> Silver: <span id='silver' class='stat'>0</span></p>
@@ -248,6 +237,8 @@ HTML_CLIENT = """
         scene.fog = new THREE.FogExp2(0x020208, 0.00002);
         
         const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000000);
+        camera.position.set(0, 150, 300);
+
         const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.25));
@@ -269,14 +260,12 @@ HTML_CLIENT = """
         scene.add(originLine);
 
         const GLOBAL_SEED = 987654321;
-
         function seededRandom(seed) {
             let x = Math.sin(seed * 9999) * 10000;
             return x - Math.floor(x);
         }
 
         const planetTextureCache = {};
-
         function generatePlanetTextures(seed) {
             if (planetTextureCache[seed]) return planetTextureCache[seed];
 
@@ -289,18 +278,18 @@ HTML_CLIENT = """
             const rand = () => { s += 1; return seededRandom(s); };
 
             const globalTemp = rand(); 
-            let baseColor, continentColor, detailColor, capColor, isLava = false;
+            let baseColor, continentColor, isLava = false;
 
             if (globalTemp > 0.82) {
-                baseColor = '#1a0b0b'; continentColor = '#e63900'; detailColor = '#ffaa00'; capColor = null; isLava = true;
+                baseColor = '#1a0b0b'; continentColor = '#e63900'; isLava = true;
             } else if (globalTemp > 0.62) {
-                baseColor = '#8c593b'; continentColor = '#d99b00'; detailColor = '#ffcc66'; capColor = null;
+                baseColor = '#8c593b'; continentColor = '#d99b00';
             } else if (globalTemp > 0.38) {
-                baseColor = '#0b3d91'; continentColor = '#3a7d44'; detailColor = '#24522c'; capColor = '#ffffff';
+                baseColor = '#0b3d91'; continentColor = '#3a7d44';
             } else if (globalTemp > 0.18) {
-                baseColor = '#2b4450'; continentColor = '#607d8b'; detailColor = '#8ca3ad'; capColor = '#e0f7fa';
+                baseColor = '#2b4450'; continentColor = '#607d8b';
             } else {
-                baseColor = '#b2ebf2'; continentColor = '#e0f7fa'; detailColor = '#ffffff'; capColor = '#ffffff';
+                baseColor = '#b2ebf2'; continentColor = '#e0f7fa';
             }
 
             ctx.fillStyle = baseColor;
@@ -314,13 +303,10 @@ HTML_CLIENT = """
                 const radiusY = 30 + rand() * 60;
 
                 ctx.beginPath();
-                const points = 12;
-                for (let i = 0; i < points; i++) {
-                    const angle = (i / points) * Math.PI * 2;
-                    const rX = radiusX * (0.6 + rand() * 0.8);
-                    const rY = radiusY * (0.6 + rand() * 0.8);
-                    const px = cx + Math.cos(angle) * rX;
-                    const py = cy + Math.sin(angle) * rY;
+                for (let i = 0; i < 12; i++) {
+                    const angle = (i / 12) * Math.PI * 2;
+                    const px = cx + Math.cos(angle) * radiusX * (0.6 + rand() * 0.8);
+                    const py = cy + Math.sin(angle) * radiusY * (0.6 + rand() * 0.8);
                     if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
                 }
                 ctx.closePath();
@@ -578,9 +564,16 @@ HTML_CLIENT = """
                     if (!gameState.players[localPlayerId]) {
                         gameState.players[localPlayerId] = { x: 200, y: 0, z: 0, angle: 0, vx: 0, vy: 0, vz: 0 };
                     }
+                    if (shipMeshes[localPlayerId]) {
+                        scene.remove(shipMeshes[localPlayerId]);
+                        delete shipMeshes[localPlayerId];
+                    }
                     return;
                 }
                 if (data.type === 'state') {
+                    const totalPlayers = Object.keys(data.gameState.players).length;
+                    document.getElementById('player-count').innerText = totalPlayers;
+
                     for (let id in data.gameState.players) {
                         if (id !== localPlayerId) {
                             gameState.players[id] = data.gameState.players[id];
@@ -597,7 +590,6 @@ HTML_CLIENT = """
                             }
                         }
                     }
-                    document.getElementById('player-count').innerText = Object.keys(data.gameState.players).length;
                 }
             };
 
@@ -739,9 +731,7 @@ HTML_CLIENT = """
                             me.vy -= 1.4 * dot * ny;
                             me.vz -= 1.4 * dot * nz;
                             
-                            me.vx *= 0.7;
-                            me.vy *= 0.7;
-                            me.vz *= 0.7;
+                            me.vx *= 0.7; me.vy *= 0.7; me.vz *= 0.7;
                         }
                     }
                 }
@@ -803,7 +793,7 @@ HTML_CLIENT = """
             }
 
             const me = gameState.players[localPlayerId];
-            if (me && shipMeshes[localPlayerId]) {
+            if (me) {
                 const linePositions = originLine.geometry.attributes.position.array;
                 linePositions[0] = me.x;
                 linePositions[1] = me.z || 0;
@@ -822,6 +812,8 @@ HTML_CLIENT = """
                 document.getElementById('pos-z').innerText = Math.round(me.y);
                 document.getElementById('pos-y').innerText = Math.round(me.z || 0);
                 document.getElementById('speed').innerText = spd;
+            } else {
+                updatePlanetClusters(0, 0, 0);
             }
 
             renderer.render(scene, camera);
@@ -869,29 +861,29 @@ HTML_CLIENT = """
                 } else {
                     currentUser = data;
                     document.getElementById('auth-overlay').style.display = 'none';
-        
-                    if (gameState.players[localPlayerId]) {
-                        gameState.players[localPlayerId].x = data.saveData.position.x || 0;
-                        gameState.players[localPlayerId].y = data.saveData.position.y || 0;
-                        gameState.players[localPlayerId].z = data.saveData.position.z || 0;
-                        
-                        // Instantly notify the backend WebSocket state of the restored login position
-                        if (ws && ws.readyState === WebSocket.OPEN) {
-                            ws.send(JSON.stringify({ 
-                                type: 'sync', 
-                                x: gameState.players[localPlayerId].x, 
-                                y: gameState.players[localPlayerId].y, 
-                                z: gameState.players[localPlayerId].z, 
-                                angle: 0, 
-                                vx: 0, 
-                                vy: 0, 
-                                vz: 0 
-                            }));
-                        }
+
+                    if (!localPlayerId) localPlayerId = "local_temp";
+                    if (!gameState.players[localPlayerId]) {
+                        gameState.players[localPlayerId] = { angle: 0, vx: 0, vy: 0, vz: 0 };
                     }
+
+                    gameState.players[localPlayerId].x = data.saveData.position.x ?? 200;
+                    gameState.players[localPlayerId].y = data.saveData.position.y ?? 0;
+                    gameState.players[localPlayerId].z = data.saveData.position.z ?? 0;
+
                     inventory = data.saveData.inventory || { iron: 0, gold: 0, silver: 0 };
-                    inventory.money = data.saveData.money || 100;
+                    inventory.money = data.saveData.money ?? 100;
                     updateUI();
+
+                    if (ws && ws.readyState === WebSocket.OPEN) {
+                        ws.send(JSON.stringify({
+                            type: 'sync',
+                            x: gameState.players[localPlayerId].x,
+                            y: gameState.players[localPlayerId].y,
+                            z: gameState.players[localPlayerId].z,
+                            angle: 0, vx: 0, vy: 0, vz: 0
+                        }));
+                    }
                 }
             } catch (err) {
                 document.getElementById('auth-msg').innerText = "Server connection error";
@@ -926,7 +918,7 @@ HTML_CLIENT = """
 """
 
 # ==============================================================================
-# 2. BACKEND GAME STATE & FASTAPI SERVER
+# SERVER ENDPOINTS
 # ==============================================================================
 class AuthRequest(BaseModel):
     username: str
@@ -948,7 +940,7 @@ def db_register(username, password):
         cursor.execute("INSERT INTO player_data (user_id) VALUES (?)", (user_id,))
         conn.commit()
         return {"success": True, "userId": user_id}
-    except Exception as e:
+    except Exception:
         return {"error": "Username already taken or database error"}
     finally:
         conn.close()
