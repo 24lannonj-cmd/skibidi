@@ -5,7 +5,6 @@ import asyncio
 import json
 import os
 import sqlite3
-import libsql
 import hashlib
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -14,6 +13,13 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 import anyio
 
+# Safely handle optional libsql dependency
+try:
+    import libsql
+    HAS_LIBSQL = True
+except ImportError:
+    HAS_LIBSQL = False
+
 # ==============================================================================
 # DATABASE SETUP
 # ==============================================================================
@@ -21,37 +27,41 @@ TURSO_URL = os.getenv("TURSO_URL", "libsql://spacegame-nc-phantom.aws-eu-west-1.
 TURSO_TOKEN = os.getenv("TURSO_TOKEN", "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3OTA3NzQzNDAsImlkIjoiMDFhMGYyNzYtNzkwMS03MDU2LTg0NTMtZjhkYWRmYTQzYzY0Iiwia2lkIjoiN1dPN292TUpxdU84dnFiSDFsZGxZTEJlSmlUV0hzY3Zrb3pMTi1wNEI2YyIsInJpZCI6IjMzYmFjOTc2LTY5ZjktNDcyYy04ZTc1LTg5ODI2MjU5YWM3NCJ9.P3pTxj8u7SuW-QqTpTMBnVb6cndYWZXJ2l5tQw0tis6lTAzR-bWmS4v17Qsf18QWK6nVQyhF645dssnjpo6bAw")
 
 def get_db_connection():
-    if TURSO_URL and TURSO_TOKEN:
-        return libsql.connect(database=TURSO_URL, auth_token=TURSO_TOKEN)
+    if HAS_LIBSQL and TURSO_URL and TURSO_TOKEN:
+        try:
+            return libsql.connect(database=TURSO_URL, auth_token=TURSO_TOKEN)
+        except Exception as e:
+            print(f"[DB Warning] Turso connection failed ({e}). Falling back to local game.db SQLite.")
     return sqlite3.connect("game.db", timeout=10)
 
 def init_db():
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE,
-            password TEXT
-        )
-    """)
-    
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS player_data (
-            user_id INTEGER PRIMARY KEY,
-            x REAL DEFAULT 200,
-            y REAL DEFAULT 0,
-            z REAL DEFAULT 0,
-            money INTEGER DEFAULT 100,
-            inventory TEXT DEFAULT '{"iron": 0, "gold": 0, "silver": 0}',
-            FOREIGN KEY(user_id) REFERENCES users(id)
-        )
-    """)
-    conn.commit()
-    conn.close()
-
-init_db()
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE,
+                password TEXT
+            )
+        """)
+        
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS player_data (
+                user_id INTEGER PRIMARY KEY,
+                x REAL DEFAULT 200,
+                y REAL DEFAULT 0,
+                z REAL DEFAULT 0,
+                money INTEGER DEFAULT 100,
+                inventory TEXT DEFAULT '{"iron": 0, "gold": 0, "silver": 0}',
+                FOREIGN KEY(user_id) REFERENCES users(id)
+            )
+        """)
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"[DB Error] Failed to initialize database: {e}")
 
 def hash_password(password: str) -> str:
     return hashlib.sha256(password.encode()).hexdigest()
@@ -73,6 +83,7 @@ async def broadcast_loop():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    init_db()
     task = asyncio.create_task(broadcast_loop())
     yield
     task.cancel()
@@ -180,7 +191,7 @@ HTML_CLIENT = """
             <input type="text" id="username" placeholder="Username" style="width: 90%; padding: 8px; margin: 8px 0; background: #111; color: #00ffff; border: 1px solid #00ffff; border-radius: 4px;" />
             <input type="password" id="password" placeholder="Password" style="width: 90%; padding: 8px; margin: 8px 0; background: #111; color: #00ffff; border: 1px solid #00ffff; border-radius: 4px;" />
             <p id="auth-msg" style="color: #ff3344; font-size: 12px; margin: 5px 0;"></p>
-            <div style="display: flex; justify-content: space-around; margin-top: 10px;">
+            <div style="display: flex; justify-style: space-around; margin-top: 10px;">
                 <button onclick="handleLogin()" style="padding: 8px 15px; background: #00ffff; color: #000; font-weight: bold; border: none; border-radius: 4px; cursor: pointer;">Login</button>
                 <button onclick="handleRegister()" style="padding: 8px 15px; background: #00ffff; color: #000; font-weight: bold; border: none; border-radius: 4px; cursor: pointer;">Register</button>
             </div>
@@ -966,12 +977,21 @@ def db_register(username, password):
     try:
         hashed_pass = hash_password(password)
         cursor.execute("INSERT INTO users (username, password) VALUES (?, ?)", (username, hashed_pass))
-        user_id = cursor.lastrowid
+        
+        user_id = getattr(cursor, "lastrowid", None)
+        if not user_id:
+            cursor.execute("SELECT last_insert_rowid()")
+            row = cursor.fetchone()
+            user_id = row[0] if row else None
+
+        if not user_id:
+            return {"error": "Failed to create user record."}
+
         cursor.execute("INSERT INTO player_data (user_id) VALUES (?)", (user_id,))
         conn.commit()
         return {"success": True, "userId": user_id}
-    except Exception:
-        return {"error": "Username already taken or database error"}
+    except Exception as e:
+        return {"error": f"Registration failed: {str(e)}"}
     finally:
         conn.close()
 
