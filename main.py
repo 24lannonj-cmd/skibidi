@@ -16,7 +16,6 @@ import anyio
 # ==============================================================================
 # DATABASE SETUP
 # ==============================================================================
-
 TURSO_URL = os.getenv("TURSO_URL", "libsql://spacegame-nc-phantom.aws-eu-west-1.turso.io")
 TURSO_TOKEN = os.getenv("TURSO_TOKEN", "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3OTA3NzQzNDAsImlkIjoiMDFhMGYyNzYtNzkwMS03MDU2LTg0NTMtZjhkYWRmYTQzYzY0Iiwia2lkIjoiN1dPN292TUpxdU84dnFiSDFsZGxZTEJlSmlUV0hzY3Zrb3pMTi1wNEI2YyIsInJpZCI6IjMzYmFjOTc2LTY5ZjktNDcyYy04ZTc1LTg5ODI2MjU5YWM3NCJ9.P3pTxj8u7SuW-QqTpTMBnVb6cndYWZXJ2l5tQw0tis6lTAzR-bWmS4v17Qsf18QWK6nVQyhF645dssnjpo6bAw")
 
@@ -24,9 +23,10 @@ def get_db_connection():
     # Uses Turso Cloud DB if credentials exist, otherwise falls back to local SQLite
     if TURSO_URL and TURSO_TOKEN:
         return libsql.connect(database=TURSO_URL, auth_token=TURSO_TOKEN)
-    return sqlite3.connect("game.db")
+    return sqlite3.connect("game.db", timeout=10)
+
 def init_db():
-    conn = sqlite3.connect("game.db")
+    conn = get_db_connection()
     cursor = conn.cursor()
     
     # Users Table
@@ -75,7 +75,7 @@ async def broadcast_loop():
                     if connection in active_connections:
                         active_connections.remove(connection)
 
-# Lifespan Context Manager (replaces deprecated @app.on_event)
+# Lifespan Context Manager
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     task = asyncio.create_task(broadcast_loop())
@@ -198,7 +198,7 @@ HTML_CLIENT = """
             <span style="font-weight: bold; width: 70px;">Iron</span>
             <div>
                 <button onclick="buyResource('iron')" style="background: #28a745; color: white; border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer; margin-right: 5px;">Buy (10$)</button>
-                <button onclick="sellResource('iron')" style="background: #dc3545; color: white; border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer;">Sell (7$)</button>
+                <button onclick="sellResource('iron')" style="background: #dc3545; color: white; border: none; padding: 6px 10px; border-radius: 4px;">Sell (7$)</button>
             </div>
         </div>
     
@@ -206,7 +206,7 @@ HTML_CLIENT = """
             <span style="font-weight: bold; width: 70px;">Silver</span>
             <div>
                 <button onclick="buyResource('silver')" style="background: #28a745; color: white; border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer; margin-right: 5px;">Buy (25$)</button>
-                <button onclick="sellResource('silver')" style="background: #dc3545; color: white; border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer;">Sell (15$)</button>
+                <button onclick="sellResource('silver')" style="background: #dc3545; color: white; border: none; padding: 6px 10px; border-radius: 4px;">Sell (15$)</button>
             </div>
         </div>
     
@@ -214,7 +214,7 @@ HTML_CLIENT = """
             <span style="font-weight: bold; width: 70px;">Gold</span>
             <div>
                 <button onclick="buyResource('gold')" style="background: #28a745; color: white; border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer; margin-right: 5px;">Buy (50$)</button>
-                <button onclick="sellResource('gold')" style="background: #dc3545; color: white; border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer;">Sell (35$)</button>
+                <button onclick="sellResource('gold')" style="background: #dc3545; color: white; border: none; padding: 6px 10px; border-radius: 4px;">Sell (35$)</button>
             </div>
         </div>
     
@@ -260,7 +260,6 @@ HTML_CLIENT = """
         sunLight.position.set(50000, 100000, 50000);
         scene.add(sunLight);
 
-        // --- WHITE ORIGIN POINTER LINE ---
         const originLineGeo = new THREE.BufferGeometry().setFromPoints([
             new THREE.Vector3(0, 0, 0),
             new THREE.Vector3(0, 0, 0)
@@ -553,7 +552,6 @@ HTML_CLIENT = """
         const stationMesh = createStationMesh();
         scene.add(stationMesh);
 
-        // Setup WebSocket with auto-reconnect fallback
         const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const wsUrl = `${wsProtocol}//${window.location.host}/ws`;
         let ws = new WebSocket(wsUrl);
@@ -674,9 +672,6 @@ HTML_CLIENT = """
             }
         }
 
-        // ===========================================
-        // PHYSICS
-        // ===========================================
         function updateLocalPhysics() {
             if (localPlayerId && gameState.players[localPlayerId]) {
                 const me = gameState.players[localPlayerId];
@@ -714,12 +709,10 @@ HTML_CLIENT = """
                     me.vx *= 0.987; me.vy *= 0.987; me.vz *= 0.950;
                 }
         
-                // Apply movement
                 me.x += me.vx; 
                 me.y += me.vy; 
                 me.z += me.vz;
         
-                // --- PLANET COLLISION DETECTION ---
                 const SHIP_PADDING = 20; 
                 for (let key in planetObjects) {
                     const planet = planetObjects[key];
@@ -811,7 +804,6 @@ HTML_CLIENT = """
 
             const me = gameState.players[localPlayerId];
             if (me && shipMeshes[localPlayerId]) {
-                // Update origin line dynamically from player position to (0, 0, 0)
                 const linePositions = originLine.geometry.attributes.position.array;
                 linePositions[0] = me.x;
                 linePositions[1] = me.z || 0;
@@ -835,9 +827,6 @@ HTML_CLIENT = """
             renderer.render(scene, camera);
         }
 
-        // =========================================
-        // SAVE & ACCOUNT CLIENT LOGIC
-        // =========================================
         let currentUser = null;
 
         async function handleRegister() {
@@ -847,13 +836,17 @@ HTML_CLIENT = """
                 document.getElementById('auth-msg').innerText = "Username & password required";
                 return;
             }
-            const res = await fetch('/api/register', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username: u, password: p })
-            });
-            const data = await res.json();
-            document.getElementById('auth-msg').innerText = data.error ? data.error : "Registered! Click Login.";
+            try {
+                const res = await fetch('/api/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: u, password: p })
+                });
+                const data = await res.json();
+                document.getElementById('auth-msg').innerText = data.error ? data.error : "Registered! Click Login.";
+            } catch (err) {
+                document.getElementById('auth-msg').innerText = "Server connection error";
+            }
         }
 
         async function handleLogin() {
@@ -863,27 +856,31 @@ HTML_CLIENT = """
                 document.getElementById('auth-msg').innerText = "Username & password required";
                 return;
             }
-            const res = await fetch('/api/login', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username: u, password: p })
-            });
-            const data = await res.json();
-            
-            if (data.error) {
-                document.getElementById('auth-msg').innerText = data.error;
-            } else {
-                currentUser = data;
-                document.getElementById('auth-overlay').style.display = 'none';
+            try {
+                const res = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: u, password: p })
+                });
+                const data = await res.json();
+                
+                if (data.error) {
+                    document.getElementById('auth-msg').innerText = data.error;
+                } else {
+                    currentUser = data;
+                    document.getElementById('auth-overlay').style.display = 'none';
 
-                if (gameState.players[localPlayerId]) {
-                    gameState.players[localPlayerId].x = data.saveData.position.x;
-                    gameState.players[localPlayerId].y = data.saveData.position.y;
-                    gameState.players[localPlayerId].z = data.saveData.position.z;
+                    if (gameState.players[localPlayerId]) {
+                        gameState.players[localPlayerId].x = data.saveData.position.x;
+                        gameState.players[localPlayerId].y = data.saveData.position.y;
+                        gameState.players[localPlayerId].z = data.saveData.position.z;
+                    }
+                    inventory = data.saveData.inventory || { iron: 0, gold: 0, silver: 0 };
+                    inventory.money = data.saveData.money || 100;
+                    updateUI();
                 }
-                inventory = data.saveData.inventory || { iron: 0, gold: 0, silver: 0 };
-                inventory.money = data.saveData.money || 100;
-                updateUI();
+            } catch (err) {
+                document.getElementById('auth-msg').innerText = "Server connection error";
             }
         }
 
@@ -891,19 +888,20 @@ HTML_CLIENT = """
             if (!currentUser || !localPlayerId || !gameState.players[localPlayerId]) return;
 
             const me = gameState.players[localPlayerId];
-            await fetch('/api/save', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    userId: currentUser.userId,
-                    position: { x: me.x, y: me.y, z: me.z },
-                    money: inventory.money,
-                    inventory: inventory
-                })
-            });
+            try {
+                await fetch('/api/save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        userId: currentUser.userId,
+                        position: { x: me.x, y: me.y, z: me.z },
+                        money: inventory.money,
+                        inventory: inventory
+                    })
+                });
+            } catch (err) {}
         }
 
-        // Periodically save state every 10 seconds
         setInterval(saveProgress, 10000);
         window.addEventListener('beforeunload', saveProgress);
         
@@ -936,8 +934,8 @@ def db_register(username, password):
         cursor.execute("INSERT INTO player_data (user_id) VALUES (?)", (user_id,))
         conn.commit()
         return {"success": True, "userId": user_id}
-    except sqlite3.IntegrityError:
-        return {"error": "Username already taken"}
+    except Exception as e:
+        return {"error": "Username already taken or database error"}
     finally:
         conn.close()
 
@@ -962,6 +960,18 @@ def db_login(username, password):
     row = cursor.fetchone()
     conn.close()
 
+    if not row:
+        return {
+            "success": True,
+            "userId": user_id,
+            "username": uname,
+            "saveData": {
+                "position": {"x": 200, "y": 0, "z": 0},
+                "money": 100,
+                "inventory": {"iron": 0, "gold": 0, "silver": 0}
+            }
+        }
+
     return {
         "success": True,
         "userId": user_id,
@@ -969,7 +979,7 @@ def db_login(username, password):
         "saveData": {
             "position": {"x": row[0], "y": row[1], "z": row[2]},
             "money": row[3],
-            "inventory": json.loads(row[4])
+            "inventory": json.loads(row[4]) if row[4] else {"iron": 0, "gold": 0, "silver": 0}
         }
     }
 
