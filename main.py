@@ -13,25 +13,13 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 import anyio
 
-try:
-    import libsql
-    HAS_LIBSQL = True
-except ImportError:
-    HAS_LIBSQL = False
-
 # ==============================================================================
 # DATABASE SETUP
 # ==============================================================================
-TURSO_URL = os.getenv("TURSO_URL", "libsql://spacegame-nc-phantom.aws-eu-west-1.turso.io")
-TURSO_TOKEN = os.getenv("TURSO_TOKEN", "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3OTA3NzQzNDAsImlkIjoiMDFhMGYyNzYtNzkwMS03MDU2LTg0NTMtZjhkYWRmYTQzYzY0Iiwia2lkIjoiN1dPN292TUpxdU84dnFiSDFsZGxZTEJlSmlUV0hzY3Zrb3pMTi1wNEI2YyIsInJpZCI6IjMzYmFjOTc2LTY5ZjktNDcyYy04ZTc1LTg5ODI2MjU5YWM3NCJ9.P3pTxj8u7SuW-QqTpTMBnVb6cndYWZXJ2l5tQw0tis6lTAzR-bWmS4v17Qsf18QWK6nVQyhF645dssnjpo6bAw")
-
 def get_db_connection():
-    if HAS_LIBSQL and TURSO_URL and TURSO_TOKEN:
-        try:
-            return libsql.connect(database=TURSO_URL, auth_token=TURSO_TOKEN)
-        except Exception as e:
-            print(f"[DB Warning] Turso connection failed ({e}). Falling back to local game.db SQLite.")
-    return sqlite3.connect("game.db", timeout=10)
+    conn = sqlite3.connect("game.db", timeout=20.0)
+    conn.execute("PRAGMA journal_mode=WAL;")
+    return conn
 
 def init_db():
     try:
@@ -183,21 +171,19 @@ HTML_CLIENT = """
     </style>
 </head>
 <body>
-    <!-- Auth Overlay -->
     <div id="auth-overlay" style="position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(5, 10, 20, 0.85); z-index: 2000; display: flex; justify-content: center; align-items: center; flex-direction: column;">
         <div style="background: rgba(15, 20, 35, 0.95); border: 2px solid #00ffff; padding: 25px; border-radius: 8px; text-align: center; width: 280px;">
             <h2 style="color: #00ffff; margin-top: 0;">PILOT LOGIN</h2>
             <input type="text" id="username" placeholder="Username" style="width: 90%; padding: 8px; margin: 8px 0; background: #111; color: #00ffff; border: 1px solid #00ffff; border-radius: 4px;" />
             <input type="password" id="password" placeholder="Password" style="width: 90%; padding: 8px; margin: 8px 0; background: #111; color: #00ffff; border: 1px solid #00ffff; border-radius: 4px;" />
             <p id="auth-msg" style="color: #ff3344; font-size: 12px; margin: 5px 0;"></p>
-            <div style="display: flex; justify-content: space-around; margin-top: 10px;">
+            <div style="display: flex; justify-style: space-around; margin-top: 10px;">
                 <button onclick="handleLogin()" style="padding: 8px 15px; background: #00ffff; color: #000; font-weight: bold; border: none; border-radius: 4px; cursor: pointer;">Login</button>
                 <button onclick="handleRegister()" style="padding: 8px 15px; background: #00ffff; color: #000; font-weight: bold; border: none; border-radius: 4px; cursor: pointer;">Register</button>
             </div>
         </div>
     </div>
 
-    <!-- Trade Overlay -->
     <div id="trade-menu" style="display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(15, 20, 30, 0.95); border: 2px solid #00d2ff; border-radius: 10px; padding: 20px; color: #fff; font-family: sans-serif; box-shadow: 0 0 20px rgba(0, 210, 255, 0.3); min-width: 320px; z-index: 1000;">
         <h2 style="margin-top: 0; text-align: center; color: #00d2ff; text-transform: uppercase; letter-spacing: 2px;">Station Trading Hub</h2>
         <p style="text-align: center; font-size: 0.9em; color: #aaa; margin-bottom: 20px;">Docked at Station (0, 0, 0)</p>
@@ -228,7 +214,6 @@ HTML_CLIENT = """
         <p style="text-align: center; font-size: 0.8em; color: #888;">Press <kbd>T</kbd> or <kbd>ESC</kbd> to exit trade hub</p>
     </div>
 
-    <!-- HUD -->
     <div id="ui">
         <h3 style="margin-top: 0; color: #00ffff; text-shadow: 0 0 8px #00ffff;">3D Infinite Warp Flight Deck</h3>
         <p>Position: X <span id="pos-x" class="stat">200</span> | Y <span id="pos-y" class="stat">0</span> | Z <span id="pos-z" class="stat">0</span></p>
@@ -582,16 +567,7 @@ HTML_CLIENT = """
             ws.onmessage = (event) => {
                 const data = JSON.parse(event.data);
                 if (data.type === 'init') {
-                    const oldId = localPlayerId;
                     localPlayerId = data.id;
-
-                    if (oldId && oldId !== localPlayerId) {
-                        delete gameState.players[oldId];
-                        if (shipMeshes[oldId]) {
-                            scene.remove(shipMeshes[oldId]);
-                            delete shipMeshes[oldId];
-                        }
-                    }
 
                     if (!gameState.players[localPlayerId]) {
                         gameState.players[localPlayerId] = { x: 200, y: 0, z: 0, angle: 0, vx: 0, vy: 0, vz: 0 };
@@ -603,22 +579,17 @@ HTML_CLIENT = """
                         gameState.players[localPlayerId].y = Number.isFinite(pos.y) ? pos.y : 0;
                         gameState.players[localPlayerId].z = Number.isFinite(pos.z) ? pos.z : 0;
                     }
-
-                    if (shipMeshes[localPlayerId]) {
-                        scene.remove(shipMeshes[localPlayerId]);
-                        delete shipMeshes[localPlayerId];
-                    }
                     return;
                 }
                 if (data.type === 'state') {
                     const totalPlayers = Object.keys(data.gameState.players).length;
                     document.getElementById('player-count').innerText = totalPlayers;
 
+                    if (!localPlayerId) return;
+
                     for (let id in data.gameState.players) {
                         if (id !== localPlayerId) {
                             gameState.players[id] = data.gameState.players[id];
-                        } else if (!gameState.players[localPlayerId]) {
-                            gameState.players[localPlayerId] = data.gameState.players[id];
                         }
                     }
                     for (let id in gameState.players) {
@@ -633,12 +604,7 @@ HTML_CLIENT = """
                 }
             };
 
-            ws.onclose = () => {
-                setTimeout(() => {
-                    setupWebSocket();
-                }, 1000);
-            };
-
+            ws.onclose = () => { setTimeout(setupWebSocket, 1000); };
             ws.onerror = (err) => {};
         }
 
@@ -709,7 +675,6 @@ HTML_CLIENT = """
             if (localPlayerId && gameState.players[localPlayerId]) {
                 const me = gameState.players[localPlayerId];
                 
-                // Sanitize numbers to prevent NaN rendering drops
                 if (!Number.isFinite(me.x)) me.x = 200;
                 if (!Number.isFinite(me.y)) me.y = 0;
                 if (!Number.isFinite(me.z)) me.z = 0;
@@ -926,11 +891,6 @@ HTML_CLIENT = """
                         gameState.players[localPlayerId].vy = 0;
                         gameState.players[localPlayerId].vz = 0;
 
-                        if (shipMeshes[localPlayerId]) {
-                            scene.remove(shipMeshes[localPlayerId]);
-                            delete shipMeshes[localPlayerId];
-                        }
-
                         if (ws && ws.readyState === WebSocket.OPEN) {
                             ws.send(JSON.stringify({
                                 type: 'sync',
@@ -997,15 +957,7 @@ def db_register(username, password):
     try:
         hashed_pass = hash_password(password)
         cursor.execute("INSERT INTO users (username, password) VALUES (?, ?)", (username, hashed_pass))
-        
-        user_id = getattr(cursor, "lastrowid", None)
-        if not user_id:
-            cursor.execute("SELECT last_insert_rowid()")
-            row = cursor.fetchone()
-            user_id = row[0] if row else None
-
-        if not user_id:
-            return {"error": "Failed to create user record."}
+        user_id = cursor.lastrowid
 
         cursor.execute("INSERT INTO player_data (user_id, x, y, z, money) VALUES (?, 200, 0, 0, 100)", (user_id,))
         conn.commit()
