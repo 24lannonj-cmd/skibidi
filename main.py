@@ -1,5 +1,5 @@
 # Run Command:
-# uvicorn main:app --host 0.0.0.0 --port 8000
+# uvicorn main:app --host 0.0.0.0 --port 8000 --workers 1
 
 import asyncio
 import json
@@ -9,6 +9,7 @@ import libsql
 import hashlib
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 import anyio
@@ -77,6 +78,14 @@ async def lifespan(app: FastAPI):
     task.cancel()
 
 app = FastAPI(lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # ==============================================================================
 # FRONTEND CLIENT
@@ -538,15 +547,14 @@ HTML_CLIENT = """
         const stationMesh = createStationMesh();
         scene.add(stationMesh);
 
-        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = `${wsProtocol}//${window.location.host}/ws`;
-        let ws = new WebSocket(wsUrl);
-
+        let ws = null;
         let localPlayerId = null;
         let gameState = { players: {} };
         const shipMeshes = {};
         const keys = {};
         let inventory = { 'iron': 0, 'gold': 0, 'silver': 0, 'money': 100 };
+        let lastSyncTime = 0;
+        let currentUser = null;
 
         window.addEventListener('keydown', e => { keys[e.key] = true; });
         window.addEventListener('keyup', e => { keys[e.key] = false; });
@@ -557,13 +565,34 @@ HTML_CLIENT = """
         });
 
         function setupWebSocket() {
+            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${wsProtocol}//${window.location.host}/ws`;
+            ws = new WebSocket(wsUrl);
+
             ws.onmessage = (event) => {
                 const data = JSON.parse(event.data);
                 if (data.type === 'init') {
+                    const oldId = localPlayerId;
                     localPlayerId = data.id;
+
+                    if (oldId && oldId !== localPlayerId) {
+                        delete gameState.players[oldId];
+                        if (shipMeshes[oldId]) {
+                            scene.remove(shipMeshes[oldId]);
+                            delete shipMeshes[oldId];
+                        }
+                    }
+
                     if (!gameState.players[localPlayerId]) {
                         gameState.players[localPlayerId] = { x: 200, y: 0, z: 0, angle: 0, vx: 0, vy: 0, vz: 0 };
                     }
+
+                    if (currentUser && currentUser.saveData && currentUser.saveData.position) {
+                        gameState.players[localPlayerId].x = currentUser.saveData.position.x ?? 200;
+                        gameState.players[localPlayerId].y = currentUser.saveData.position.y ?? 0;
+                        gameState.players[localPlayerId].z = currentUser.saveData.position.z ?? 0;
+                    }
+
                     if (shipMeshes[localPlayerId]) {
                         scene.remove(shipMeshes[localPlayerId]);
                         delete shipMeshes[localPlayerId];
@@ -595,10 +624,11 @@ HTML_CLIENT = """
 
             ws.onclose = () => {
                 setTimeout(() => {
-                    ws = new WebSocket(wsUrl);
                     setupWebSocket();
                 }, 1000);
             };
+
+            ws.onerror = (err) => {};
         }
 
         setupWebSocket();
@@ -736,7 +766,9 @@ HTML_CLIENT = """
                     }
                 }
         
-                if (ws.readyState === WebSocket.OPEN) {
+                const now = Date.now();
+                if (ws && ws.readyState === WebSocket.OPEN && (now - lastSyncTime > 30)) {
+                    lastSyncTime = now;
                     ws.send(JSON.stringify({ 
                         type: 'sync', x: me.x, y: me.y, z: me.z, angle: me.angle, vx: me.vx, vy: me.vy, vz: me.vz 
                     }));
@@ -819,8 +851,6 @@ HTML_CLIENT = """
             renderer.render(scene, camera);
         }
 
-        let currentUser = null;
-
         async function handleRegister() {
             const u = document.getElementById('username').value;
             const p = document.getElementById('password').value;
@@ -862,28 +892,28 @@ HTML_CLIENT = """
                     currentUser = data;
                     document.getElementById('auth-overlay').style.display = 'none';
 
-                    if (!localPlayerId) localPlayerId = "local_temp";
-                    if (!gameState.players[localPlayerId]) {
-                        gameState.players[localPlayerId] = { angle: 0, vx: 0, vy: 0, vz: 0 };
-                    }
+                    if (localPlayerId) {
+                        if (!gameState.players[localPlayerId]) {
+                            gameState.players[localPlayerId] = { angle: 0, vx: 0, vy: 0, vz: 0 };
+                        }
+                        gameState.players[localPlayerId].x = data.saveData.position.x ?? 200;
+                        gameState.players[localPlayerId].y = data.saveData.position.y ?? 0;
+                        gameState.players[localPlayerId].z = data.saveData.position.z ?? 0;
 
-                    gameState.players[localPlayerId].x = data.saveData.position.x ?? 200;
-                    gameState.players[localPlayerId].y = data.saveData.position.y ?? 0;
-                    gameState.players[localPlayerId].z = data.saveData.position.z ?? 0;
+                        if (ws && ws.readyState === WebSocket.OPEN) {
+                            ws.send(JSON.stringify({
+                                type: 'sync',
+                                x: gameState.players[localPlayerId].x,
+                                y: gameState.players[localPlayerId].y,
+                                z: gameState.players[localPlayerId].z,
+                                angle: 0, vx: 0, vy: 0, vz: 0
+                            }));
+                        }
+                    }
 
                     inventory = data.saveData.inventory || { iron: 0, gold: 0, silver: 0 };
                     inventory.money = data.saveData.money ?? 100;
                     updateUI();
-
-                    if (ws && ws.readyState === WebSocket.OPEN) {
-                        ws.send(JSON.stringify({
-                            type: 'sync',
-                            x: gameState.players[localPlayerId].x,
-                            y: gameState.players[localPlayerId].y,
-                            z: gameState.players[localPlayerId].z,
-                            angle: 0, vx: 0, vy: 0, vz: 0
-                        }));
-                    }
                 }
             } catch (err) {
                 document.getElementById('auth-msg').innerText = "Server connection error";
@@ -1027,9 +1057,9 @@ async def websocket_endpoint(websocket: WebSocket):
     player_id = str(id(websocket))
     game_state["players"][player_id] = {"x": 200, "y": 0, "z": 0, "angle": 0, "vx": 0, "vy": 0, "vz": 0}
     
-    await websocket.send_text(json.dumps({"type": "init", "id": player_id}))
-
     try:
+        await websocket.send_text(json.dumps({"type": "init", "id": player_id}))
+
         while True:
             data = await websocket.receive_text()
             payload = json.loads(data)
