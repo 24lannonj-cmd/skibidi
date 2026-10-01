@@ -85,10 +85,12 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
+# CORS Fix: set allow_credentials=False when using wildcard origins ("*")
+# to comply with browser security policies
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -185,7 +187,7 @@ HTML_CLIENT = """
             <input type="text" id="username" placeholder="Username" style="width: 90%; padding: 8px; margin: 8px 0; background: #111; color: #00ffff; border: 1px solid #00ffff; border-radius: 4px;" />
             <input type="password" id="password" placeholder="Password" style="width: 90%; padding: 8px; margin: 8px 0; background: #111; color: #00ffff; border: 1px solid #00ffff; border-radius: 4px;" />
             <p id="auth-msg" style="color: #ff3344; font-size: 12px; margin: 5px 0;"></p>
-            <div style="display: flex; justify-content: space-around; margin-top: 10px;">
+            <div style="display: flex; justify-space-around; margin-top: 10px;">
                 <button onclick="handleLogin()" style="padding: 8px 15px; background: #00ffff; color: #000; font-weight: bold; border: none; border-radius: 4px; cursor: pointer;">Login</button>
                 <button onclick="handleRegister()" style="padding: 8px 15px; background: #00ffff; color: #000; font-weight: bold; border: none; border-radius: 4px; cursor: pointer;">Register</button>
             </div>
@@ -1133,7 +1135,6 @@ async def websocket_endpoint(websocket: WebSocket):
                 async with state_lock:
                     p = game_state["players"].get(player_id)
                 if p:
-                    # Validate numeric bounds to prevent teleportation/exploits
                     x = payload.get("x", p["x"])
                     y = payload.get("y", p["y"])
                     z = payload.get("z", p["z"])
@@ -1152,4 +1153,3 @@ async def websocket_endpoint(websocket: WebSocket):
                 active_connections.remove(websocket)
             if player_id in game_state["players"]:
                 del game_state["players"][player_id]
-
