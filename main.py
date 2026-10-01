@@ -1,3 +1,4 @@
+```python
 # Run Command:
 # uvicorn main:app --host 0.0.0.0 --port 8000 --workers 1
 
@@ -6,6 +7,7 @@ import json
 import os
 import sqlite3
 import hashlib
+import uuid
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,6 +21,7 @@ import anyio
 def get_db_connection():
     conn = sqlite3.connect("game.db", timeout=20.0)
     conn.execute("PRAGMA journal_mode=WAL;")
+    conn.row_factory = sqlite3.Row
     return conn
 
 def init_db():
@@ -55,18 +58,24 @@ def hash_password(password: str) -> str:
 
 active_connections: list[WebSocket] = []
 game_state = {"players": {}}
+state_lock = asyncio.Lock()
 
 async def broadcast_loop():
     while True:
         await asyncio.sleep(1 / 30)
         if active_connections:
             message = json.dumps({"type": "state", "gameState": game_state})
+            dead = []
             for connection in list(active_connections):
                 try:
                     await connection.send_text(message)
                 except Exception:
-                    if connection in active_connections:
-                        active_connections.remove(connection)
+                    dead.append(connection)
+            if dead:
+                async with state_lock:
+                    for conn in dead:
+                        if conn in active_connections:
+                            active_connections.remove(conn)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -177,7 +186,7 @@ HTML_CLIENT = """
             <input type="text" id="username" placeholder="Username" style="width: 90%; padding: 8px; margin: 8px 0; background: #111; color: #00ffff; border: 1px solid #00ffff; border-radius: 4px;" />
             <input type="password" id="password" placeholder="Password" style="width: 90%; padding: 8px; margin: 8px 0; background: #111; color: #00ffff; border: 1px solid #00ffff; border-radius: 4px;" />
             <p id="auth-msg" style="color: #ff3344; font-size: 12px; margin: 5px 0;"></p>
-            <div style="display: flex; justify-style: space-around; margin-top: 10px;">
+            <div style="display: flex; justify-content: space-around; margin-top: 10px;">
                 <button onclick="handleLogin()" style="padding: 8px 15px; background: #00ffff; color: #000; font-weight: bold; border: none; border-radius: 4px; cursor: pointer;">Login</button>
                 <button onclick="handleRegister()" style="padding: 8px 15px; background: #00ffff; color: #000; font-weight: bold; border: none; border-radius: 4px; cursor: pointer;">Register</button>
             </div>
@@ -432,7 +441,7 @@ HTML_CLIENT = """
                 if (!planet) continue;
 
                 const dx = planet.x - playerX;
-                const dy = planet.z - playerY; 
+                const dy = planet.z - playerY;  
                 const dz = planet.y - playerZ;
                 const dist = Math.sqrt(dx * dx + dy * dy + dz * dz) - planet.radius;
 
@@ -653,22 +662,36 @@ HTML_CLIENT = """
             }
         });
 
-        function buyResource(res) {
-            if (inventory.money >= tradePrices[res].buy) {
-                inventory.money -= tradePrices[res].buy;
-                inventory[res] = (inventory[res] || 0) + 1;
+        async function buyResource(res) {
+            if (!localPlayerId || !currentUser) return;
+            try {
+                const res2 = await fetch('/api/trade', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userId: currentUser.userId, action: 'buy', resource: res })
+                });
+                const data = await res2.json();
+                if (data.error) { alert(data.error); return; }
+                inventory = data.inventory;
+                inventory.money = data.money;
                 updateUI();
-                saveProgress();
-            }
+            } catch (err) {}
         }
         
-        function sellResource(res) {
-            if (inventory[res] >= 1) {
-                inventory[res] -= 1;
-                inventory.money += tradePrices[res].sell;
+        async function sellResource(res) {
+            if (!localPlayerId || !currentUser) return;
+            try {
+                const res2 = await fetch('/api/trade', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userId: currentUser.userId, action: 'sell', resource: res })
+                });
+                const data = await res2.json();
+                if (data.error) { alert(data.error); return; }
+                inventory = data.inventory;
+                inventory.money = data.money;
                 updateUI();
-                saveProgress();
-            }
+            } catch (err) {}
         }
 
         function updateLocalPhysics() {
@@ -731,7 +754,7 @@ HTML_CLIENT = """
                         const nx = dx / dist;
                         const ny = dy / dist;
                         const nz = dz / dist;
-        
+
                         me.x = planet.x + nx * minDist;
                         me.y = planet.y + ny * minDist;
                         me.z = planet.z + nz * minDist;
@@ -951,6 +974,11 @@ class SaveRequest(BaseModel):
     money: int
     inventory: dict
 
+class TradeRequest(BaseModel):
+    userId: int
+    action: str
+    resource: str
+
 def db_register(username, password):
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -1042,6 +1070,48 @@ def db_save(data: SaveRequest):
 async def save_game(data: SaveRequest):
     return await anyio.to_thread.run_sync(db_save, data)
 
+def db_trade(data: TradeRequest):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT money, inventory FROM player_data WHERE user_id = ?", (data.userId,))
+        row = cursor.fetchone()
+        if not row:
+            return {"error": "Player data not found"}
+
+        money = row[0]
+        inv = json.loads(row[1]) if row[1] else {"iron": 0, "gold": 0, "silver": 0}
+
+        prices = {"iron": {"buy": 10, "sell": 7}, "gold": {"buy": 50, "sell": 35}, "silver": {"buy": 25, "sell": 15}}
+        price = prices.get(data.resource)
+        if not price:
+            return {"error": "Invalid resource"}
+
+        if data.action == "buy":
+            if money < price["buy"]:
+                return {"error": "Not enough money"}
+            money -= price["buy"]
+            inv[data.resource] = inv.get(data.resource, 0) + 1
+        elif data.action == "sell":
+            if inv.get(data.resource, 0) < 1:
+                return {"error": "Not enough resources"}
+            inv[data.resource] -= 1
+            money += price["sell"]
+        else:
+            return {"error": "Invalid action"}
+
+        cursor.execute("UPDATE player_data SET money = ?, inventory = ? WHERE user_id = ?", (money, json.dumps(inv), data.userId))
+        conn.commit()
+        return {"success": True, "money": money, "inventory": inv}
+    except Exception as e:
+        return {"error": str(e)}
+    finally:
+        conn.close()
+
+@app.post("/api/trade")
+async def trade(data: TradeRequest):
+    return await anyio.to_thread.run_sync(db_trade, data)
+
 @app.get("/")
 async def get():
     return HTMLResponse(HTML_CLIENT)
@@ -1049,9 +1119,10 @@ async def get():
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
-    active_connections.append(websocket)
-    player_id = str(id(websocket))
-    game_state["players"][player_id] = {"x": 200, "y": 0, "z": 0, "angle": 0, "vx": 0, "vy": 0, "vz": 0}
+    player_id = str(uuid.uuid4())
+    async with state_lock:
+        active_connections.append(websocket)
+        game_state["players"][player_id] = {"x": 200, "y": 0, "z": 0, "angle": 0, "vx": 0, "vy": 0, "vz": 0}
     
     try:
         await websocket.send_text(json.dumps({"type": "init", "id": player_id}))
@@ -1060,11 +1131,16 @@ async def websocket_endpoint(websocket: WebSocket):
             data = await websocket.receive_text()
             payload = json.loads(data)
             if payload.get("type") == "sync":
-                p = game_state["players"].get(player_id)
+                async with state_lock:
+                    p = game_state["players"].get(player_id)
                 if p:
-                    p["x"] = payload.get("x", p["x"])
-                    p["y"] = payload.get("y", p["y"])
-                    p["z"] = payload.get("z", p["z"])
+                    # Validate numeric bounds to prevent teleportation/exploits
+                    x = payload.get("x", p["x"])
+                    y = payload.get("y", p["y"])
+                    z = payload.get("z", p["z"])
+                    if isinstance(x, (int, float)) and abs(x) < 1e9: p["x"] = x
+                    if isinstance(y, (int, float)) and abs(y) < 1e9: p["y"] = y
+                    if isinstance(z, (int, float)) and abs(z) < 1e9: p["z"] = z
                     p["angle"] = payload.get("angle", p["angle"])
                     p["vx"] = payload.get("vx", p["vx"])
                     p["vy"] = payload.get("vy", p["vy"])
@@ -1072,7 +1148,9 @@ async def websocket_endpoint(websocket: WebSocket):
     except (WebSocketDisconnect, Exception):
         pass
     finally:
-        if websocket in active_connections:
-            active_connections.remove(websocket)
-        if player_id in game_state["players"]:
-            del game_state["players"][player_id]
+        async with state_lock:
+            if websocket in active_connections:
+                active_connections.remove(websocket)
+            if player_id in game_state["players"]:
+                del game_state["players"][player_id]
+```
