@@ -1,4 +1,3 @@
-```python
 # Run Command:
 # uvicorn main:app --host 0.0.0.0 --port 8000 --workers 1
 
@@ -1153,4 +1152,4 @@ async def websocket_endpoint(websocket: WebSocket):
                 active_connections.remove(websocket)
             if player_id in game_state["players"]:
                 del game_state["players"][player_id]
-```
+
